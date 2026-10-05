@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background-color: #efede7;
+  color: #28443d;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+select option {
+  background-color: #fff;
+  color: #28443d;
+}
+
+::selection {
+  background: rgba(21, 85, 79, 0.25);
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-thumb { background: rgba(40, 68, 61, 0.32); border-radius: 9999px; }
+.theme-dark ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); }

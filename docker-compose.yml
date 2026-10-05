@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  # ۱. پایگاه داده PostgreSQL با افزونه هوش مصنوعی pgvector
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: office_db
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: office_automation
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # ۲. سرویس هوش مصنوعی (پایتون)
+  ai_agent:
+    build:
+      context: ./ai-agent
+      dockerfile: Dockerfile.dev
+    container_name: office_ai_agent
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ai-agent:/app  # اتصال کدهای سیستم شما به داخل داکر برای اعمال در لحظه تغییرات
+    environment:
+      DATABASE_URL: postgresql://admin:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/office_automation
+    depends_on:
+      - db
+
+  # ۳. فرانت‌اند سازمانی و مردمی (Turborepo)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: office_frontend
+    restart: always
+    ports:
+      - "3000:3000" # پورت پیش‌فرض پنل ادمین
+      - "3001:3001" # پورت پیش‌فرض PWA
+    volumes:
+      - ./:/app
+      - /app/node_modules # جلوگیری از تداخل node_modules ویندوز و لینوکس
+    environment:
+      - NEXT_PUBLIC_AI_API_URL=http://localhost:8000
+    depends_on:
+      - ai_agent
+
+volumes:
+  postgres_data:

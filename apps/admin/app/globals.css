@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background-color: #f1efe7;
+  color: #28443d;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+select option {
+  background-color: #fff;
+  color: #111827;
+}
+
+.chat-message-composer {
+  scrollbar-width: none;
+}
+
+.chat-message-composer::-webkit-scrollbar {
+  display: none;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(43, 83, 71, 0.32);
+  border-radius: 9999px;
+}
