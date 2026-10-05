@@ -1,59 +1,59 @@
-# سامانه اتوماسیون اداری
+# Office Automation System
 
-مجموعه‌ای آزمایشی برای مدیریت گردش‌کارهای اداری، شامل پنل مدیریت، پرتال مراجعان و سرویس نمونهٔ هوش مصنوعی. رابط‌ها فارسی و راست‌چین هستند.
+A prototype for managing administrative workflows, featuring an administration dashboard, a public client portal, and a sample AI service. The application interfaces are in Persian and use right-to-left layouts.
 
-## اجزای پروژه
+## Project Components
 
-- `apps/admin`: پنل مدیریت کارکنان، درخواست‌ها، تقویم و فرایندها
-- `apps/client`: پرتال مراجعان برای ثبت و پیگیری درخواست‌ها
-- `ai-agent`: سرویس آزمایشی FastAPI برای شبیه‌سازی استخراج فرم از فایل
-- `packages`: پیکربندی‌ها و اجزای مشترک monorepo
+- `apps/admin`: Administration dashboard for employees, requests, calendar events, and processes
+- `apps/client`: Client portal for submitting and tracking requests
+- `ai-agent`: Sample FastAPI service that simulates form extraction from uploaded files
+- `packages`: Shared monorepo configuration and UI components
 
-بخش‌هایی از داده‌ها و عملیات فعلی نمایشی و محلی هستند؛ سرویس AI نمونه‌ای است و فعلاً استخراج واقعی انجام نمی‌دهد.
+Some data and operations are currently local demonstrations. The AI service is a prototype and does not perform actual document extraction yet.
 
-## پیش‌نیازها
+## Prerequisites
 
-- Node.js 24 یا جدیدتر
+- Node.js 24 or later
 - npm 11
-- برای اجرای سرویس‌های Docker: Docker Compose
+- Docker Compose (for running the containerized services)
 
-## راه‌اندازی وب‌اپ‌ها
+## Run the Web Applications
 
-از ریشهٔ مخزن وابستگی‌ها را نصب کنید:
+Install dependencies from the repository root:
 
 ```powershell
 npm ci
 ```
 
-برای اجرای پرتال مراجعان (پورت 3002):
+Start the client portal on port 3002:
 
 ```powershell
 npm run dev
 ```
 
-برای اجرای پنل مدیریت (پورت 3000)، در ترمینالی جدا:
+Start the administration dashboard on port 3000 in a separate terminal:
 
 ```powershell
 npm --workspace ./apps/admin run dev
 ```
 
-## سرویس‌های Docker
+## Run the Docker Services
 
-برای اجرای سرویس‌های نمونه، فایل محیطی محلی بسازید و مقدار رمز پایگاه‌داده را تغییر دهید:
+Create a local environment file and set a strong database password:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-سپس سرویس‌ها را اجرا کنید:
+Then start the services:
 
 ```powershell
 docker compose up --build
 ```
 
-فایل `.env` محلی در Git نادیده گرفته می‌شود؛ هیچ رمز واقعی را در مخزن قرار ندهید.
+The local `.env` file is ignored by Git. Do not add real credentials to the repository.
 
-## بررسی پروژه
+## Checks
 
 ```powershell
 npm run lint
