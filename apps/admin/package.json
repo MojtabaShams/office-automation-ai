@@ -14,6 +14,7 @@
     "@repo/ui": "*",
     "@tanstack/react-table": "^8.20.5",
     "lucide-react": "^1.48.0",
+    "mathjs": "^15.2.0",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp, Plus, Trash2, X } from "lucide-react";
 import ThemedSelect from "../ThemedSelect";
 import type { ProcessConditionOperator, ProcessField, ProcessFieldType } from "../../app/lib/mock-processes";
+import { UNIT_CATEGORIES, getUnitCategoryId } from "../../app/lib/units";
 
 const FIELD_TYPES: { value: ProcessFieldType; label: string }[] = [
   { value: "text", label: "متن" },
@@ -165,9 +166,43 @@ export default function ProcessFieldBuilder({
                 </div>
               </div>
 
-              {!isContainer && field.type !== "file" && field.type !== "date" && field.type !== "section" && (
+              {!isContainer && field.type === "number" && (
+                <div className="mt-2 grid max-w-xl gap-2 sm:grid-cols-2">
+                  <label className={`text-[0.68rem] font-semibold ${muted}`}>دسته واحد
+                    <ThemedSelect
+                      value={field.unitCategory ?? getUnitCategoryId(field.unit) ?? ""}
+                      onChange={(event) => {
+                        const category = UNIT_CATEGORIES.find((item) => item.id === event.target.value);
+                        patchField(index, {
+                          unitCategory: category?.id,
+                          unit: category?.units[0]?.id ?? "",
+                        });
+                      }}
+                      className={`${inputClass} mt-1 pl-8`}
+                      arrowClassName={`left-2.5 ${muted}`}
+                    >
+                      <option value="" style={{ background: "#fff", color: "#111827" }}>انتخاب دسته</option>
+                      {UNIT_CATEGORIES.map((category) => <option key={category.id} value={category.id} style={{ background: "#fff", color: "#111827" }}>{category.label}</option>)}
+                    </ThemedSelect>
+                  </label>
+                  <label className={`text-[0.68rem] font-semibold ${muted}`}>واحد
+                    <ThemedSelect
+                      value={field.unit ?? ""}
+                      onChange={(event) => patchField(index, { unit: event.target.value })}
+                      disabled={!field.unitCategory && !getUnitCategoryId(field.unit)}
+                      className={`${inputClass} mt-1 pl-8`}
+                      arrowClassName={`left-2.5 ${muted}`}
+                    >
+                      <option value="" style={{ background: "#fff", color: "#111827" }}>انتخاب واحد</option>
+                      {UNIT_CATEGORIES.find((category) => category.id === (field.unitCategory ?? getUnitCategoryId(field.unit)))?.units.map((unit) => <option key={unit.id} value={unit.id} style={{ background: "#fff", color: "#111827" }}>{unit.label}</option>)}
+                    </ThemedSelect>
+                  </label>
+                </div>
+              )}
+
+              {!isContainer && field.type !== "number" && field.type !== "file" && field.type !== "date" && field.type !== "section" && (
                 <label className={`mt-2 block max-w-xs text-[0.68rem] font-semibold ${muted}`}>واحد، پیشوند یا پسوند (اختیاری)
-                  <input value={field.unit ?? ""} onChange={(event) => patchField(index, { unit: event.target.value })} className={`${inputClass} mt-1`} placeholder={field.type === "number" ? "مثلاً متر مربع، ریال، تومان، کیلوگرم" : "متن واحد"} />
+                  <input value={field.unit ?? ""} onChange={(event) => patchField(index, { unit: event.target.value })} className={`${inputClass} mt-1`} placeholder="متن واحد" />
                 </label>
               )}
 
@@ -240,11 +275,33 @@ export default function ProcessFieldBuilder({
                           next[subIndex] = { ...subField, slug: uniqueSlugValue(event.target.value, field.subFields ?? [], subField.id) };
                           patchField(index, { subFields: next });
                         }} className={inputClass} dir="ltr" placeholder="variable_key" />
-                        <input value={subField.unit ?? ""} onChange={(event) => {
-                          const next = [...(field.subFields ?? [])];
-                          next[subIndex] = { ...subField, unit: event.target.value };
-                          patchField(index, { subFields: next });
-                        }} className={inputClass} placeholder="واحد" />
+                        {subField.type === "number" ? (
+                          <div className="grid gap-1">
+                            <ThemedSelect value={subField.unitCategory ?? getUnitCategoryId(subField.unit) ?? ""} onChange={(event) => {
+                              const category = UNIT_CATEGORIES.find((item) => item.id === event.target.value);
+                              const next = [...(field.subFields ?? [])];
+                              next[subIndex] = { ...subField, unitCategory: category?.id, unit: category?.units[0]?.id ?? "" };
+                              patchField(index, { subFields: next });
+                            }} className={inputClass} arrowClassName={`left-2.5 ${muted}`}>
+                              <option value="" style={{ background: "#fff", color: "#111827" }}>دسته</option>
+                              {UNIT_CATEGORIES.map((category) => <option key={category.id} value={category.id} style={{ background: "#fff", color: "#111827" }}>{category.label}</option>)}
+                            </ThemedSelect>
+                            <ThemedSelect value={subField.unit ?? ""} onChange={(event) => {
+                              const next = [...(field.subFields ?? [])];
+                              next[subIndex] = { ...subField, unit: event.target.value };
+                              patchField(index, { subFields: next });
+                            }} className={inputClass} arrowClassName={`left-2.5 ${muted}`}>
+                              <option value="" style={{ background: "#fff", color: "#111827" }}>واحد</option>
+                              {UNIT_CATEGORIES.find((category) => category.id === (subField.unitCategory ?? getUnitCategoryId(subField.unit)))?.units.map((unit) => <option key={unit.id} value={unit.id} style={{ background: "#fff", color: "#111827" }}>{unit.label}</option>)}
+                            </ThemedSelect>
+                          </div>
+                        ) : (
+                          <input value={subField.unit ?? ""} onChange={(event) => {
+                            const next = [...(field.subFields ?? [])];
+                            next[subIndex] = { ...subField, unit: event.target.value };
+                            patchField(index, { subFields: next });
+                          }} className={inputClass} placeholder="واحد" />
+                        )}
                         <label className={`flex items-center gap-1 whitespace-nowrap text-[0.62rem] ${muted}`}>
                           <input type="checkbox" checked={subField.required} onChange={(event) => {
                             const next = [...(field.subFields ?? [])];

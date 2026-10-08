@@ -15,6 +15,7 @@ import {
   Home,
   Users,
   Workflow,
+  FileText,
   ClipboardList,
   CalendarDays,
   MessageSquare,
@@ -25,6 +26,7 @@ import { useTheme } from "../theme-context";
 const navItems = [
   { href: "/", label: "صفحه اصلی", icon: Home },
   { href: "/employees", label: "کارمندان", icon: Users },
+  { href: "/forms", label: "فرم‌ها", icon: FileText },
   { href: "/processes", label: "پروسه‌ها", icon: Workflow },
   { href: "/requests", label: "درخواست‌ها", icon: ClipboardList },
   { href: "/calendar", label: "تقویم کاری", icon: CalendarDays },
@@ -52,7 +54,7 @@ function ThemeButtons() {
       className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
         themeMode === mode
           ? "bg-[#15554f] text-white shadow-md shadow-black/20"
-            : inactive
+          : inactive
       }`}
     >
       <Icon className="h-4 w-4" />
@@ -102,7 +104,9 @@ export default function AdminTopBar() {
     <nav aria-label="منوی اصلی" className="flex flex-col gap-1 lg:flex-row lg:items-center lg:gap-0.5">
       {navItems.map(({ href, label, icon: Icon }) => {
         const isActive =
-          pathname === href || (href === "/requests" && pathname.startsWith("/requests/"));
+          pathname === href ||
+          (href === "/requests" && pathname.startsWith("/requests/")) ||
+          (href === "/forms" && pathname.startsWith("/forms/"));
         return (
           <Link
             key={href}

@@ -133,6 +133,7 @@ export default function JalaliDateRangeFilter({
             maxHeight: panelPosition.maxHeight,
           }}
           className={`z-[1000] w-64 max-w-[calc(100vw-16px)] overflow-y-auto rounded-xl border p-3 shadow-xl ${t.panel}`}
+          dir="rtl"
         >
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-bold">{label}</span>

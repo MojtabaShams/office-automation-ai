@@ -1,3 +1,9 @@
+import type { UnitCategoryId } from "./units";
+import { initialForms, type FormDefinition } from "./mock-forms";
+
+export { initialForms, saveForms } from "./mock-forms";
+export type { FormDefinition, FormType, FormVersionSnapshot, ValidationRule } from "./mock-forms";
+
 export type ProcessStatus = "active" | "inactive" | "draft" | "archived";
 export type ProcessFieldType =
   | "text"
@@ -5,14 +11,18 @@ export type ProcessFieldType =
   | "date"
   | "file"
   | "select"
+  | "radio"
+  | "boolean"
   | "repeater"
   | "section";
-export type ProcessConditionOperator = "equals" | "notEquals" | "contains" | "greaterThan" | "lessThan";
+export type ProcessConditionOperator = "equals" | "notEquals" | "contains" | "isEmpty" | "greaterThan" | "lessThan";
 
 export type ProcessFieldCondition = {
-  fieldKey: string;
-  operator: ProcessConditionOperator;
-  value: string;
+  logic?: "and" | "or";
+  clauses?: { variableId: string; operator: ProcessConditionOperator; value: string }[];
+  fieldKey?: string;
+  operator?: ProcessConditionOperator;
+  value?: string;
 };
 export type StageAssigneeType = "applicant" | "employee";
 export type PaymentMode = "none" | "fixed" | "formula";
@@ -23,6 +33,28 @@ export type ProcessStage = {
   assigneeType: StageAssigneeType;
   assigneeRole: string;
   slaDays: number;
+  formIds?: string[];
+  formVersions?: Record<string, string>;
+  guidance?: string;
+  routeRules?: StageRouteRule[];
+  defaultNextStageId?: string;
+};
+
+export type StageRouteRule = {
+  id: string;
+  condition: import("../../components/ConditionFormulaEditor").ConditionValue;
+  nextStageId: string;
+};
+
+export type ComputedProcessField = {
+  id: string;
+  name: string;
+  formula: import("../../components/ConditionFormulaEditor").FormulaValue;
+  unit?: string;
+  destination: "internal" | "form";
+  destinationStageId?: string;
+  destinationFormId?: string;
+  destinationFieldId?: string;
 };
 
 export type ProcessField = {
@@ -32,9 +64,16 @@ export type ProcessField = {
   required: boolean;
   options?: string[];
   unit?: string;
+  unitCategory?: UnitCategoryId;
   slug?: string;
   condition?: ProcessFieldCondition;
   subFields?: ProcessField[];
+  minRows?: number;
+  maxRows?: number;
+  allowedFileTypes?: string[];
+  maxFileSizeMb?: number;
+  minFiles?: number;
+  maxFiles?: number;
 };
 
 export type ProcessDefinition = {
@@ -53,11 +92,14 @@ export type ProcessDefinition = {
   rules: string[];
   applicantGuidance: string;
   payment: { mode: PaymentMode; provider: string; amount: number; formula: string };
+  computedFields?: ComputedProcessField[];
+  publishedVersions?: { version: string; publishedAt: string; stages: ProcessStage[]; fields: ProcessField[]; payment: ProcessDefinition["payment"] }[];
   sourceFileName?: string;
   directiveFileNames: string[];
 };
 
 export const PROCESS_STORAGE_KEY = "office-admin-process-definitions-v1";
+export { FORM_STORAGE_KEY } from "./mock-forms";
 export const PROCESS_DEPARTMENTS = [
   "شهرسازی",
   "منابع انسانی",
@@ -81,7 +123,48 @@ const stages = (titles: string[], role: string): ProcessStage[] =>
     assigneeType: index === 0 ? "applicant" : "employee",
     assigneeRole: index === 0 ? "متقاضی" : role,
     slaDays: index === 0 ? 1 : 3,
+    formIds: [],
+    guidance: "",
   }));
+
+const configuredStages = (titles: string[], role: string, assignments: string[][]): ProcessStage[] =>
+  stages(titles, role).map((stage, index) => {
+    const formIds = assignments[index] ?? [];
+    return {
+      ...stage,
+      formIds,
+      formVersions: Object.fromEntries(formIds.flatMap((id) => {
+        const form = initialForms.find((item) => item.id === id);
+        return form ? [[id, form.version]] : [];
+      })),
+    };
+  });
+
+const constructionStages = configuredStages(
+  ["ثبت اطلاعات متقاضی", "بارگذاری مدارک", "بررسی کارشناس شهرسازی", "تأیید مدیر واحد"],
+  "کارشناس شهرسازی",
+  [["form-construction-application"], [], ["form-payment-fee"], []],
+);
+constructionStages[0] = {
+  ...constructionStages[0]!,
+  routeRules: [{
+    id: "route-large-property",
+    condition: { logic: "and", clauses: [{ variableId: "form-construction-application:property-area", operator: "greaterThan", value: "200" }] },
+    nextStageId: constructionStages[2]!.id,
+  }],
+  defaultNextStageId: constructionStages[1]!.id,
+};
+
+const employmentStages = configuredStages(
+  ["تکمیل درخواست", "بررسی منابع انسانی", "تأیید مدیر واحد", "صدور گواهی"],
+  "کارشناس منابع انسانی",
+  [[], [], [], []],
+);
+const leaveStages = configuredStages(
+  ["ثبت بازه مرخصی", "بررسی مانده", "تأیید سرپرست"],
+  "سرپرست واحد",
+  [["form-hr-leave"], [], []],
+);
 
 export const initialProcesses: ProcessDefinition[] = [
   {
@@ -95,7 +178,7 @@ export const initialProcesses: ProcessDefinition[] = [
     version: "1.2",
     activeCases: 12,
     updatedAt: "2026-10-02T11:00:00",
-    stages: stages(["ثبت اطلاعات متقاضی", "بارگذاری مدارک", "بررسی کارشناس شهرسازی", "تأیید مدیر واحد"], "کارشناس شهرسازی"),
+    stages: constructionStages,
     fields: [
       { id: "owner", label: "نام مالک", type: "text", required: true },
       { id: "national-id", label: "کد ملی مالک", type: "text", required: true },
@@ -106,6 +189,16 @@ export const initialProcesses: ProcessDefinition[] = [
     rules: ["کد ملی باید ۱۰ رقم باشد.", "شماره تماس باید ۱۱ رقم باشد.", "مساحت زمین باید عددی بزرگ‌تر از صفر باشد."],
     applicantGuidance: "ابتدا اطلاعات مالک و ملک را وارد کنید، سپس تصویر خوانای سند مالکیت را بارگذاری کنید.",
     payment: { mode: "fixed", provider: "درگاه پرداخت بانکی", amount: 2500000, formula: "" },
+    computedFields: [{
+      id: "calc-construction-fee",
+      name: "هزینه بررسی",
+      formula: { tokens: [{ kind: "variable", variableId: "form-construction-application:property-area" }, { kind: "operator", value: "*" }, { kind: "number", value: "2500" }] },
+      unit: "rial",
+      destination: "form",
+      destinationStageId: constructionStages[2]!.id,
+      destinationFormId: "form-payment-fee",
+    }],
+    publishedVersions: [],
     sourceFileName: "فرم-پروانه-ساختمانی.docx",
     directiveFileNames: ["بخشنامه-شهرسازی-۱۴۰۵.pdf"],
   },
@@ -120,7 +213,7 @@ export const initialProcesses: ProcessDefinition[] = [
     version: "2.0",
     activeCases: 8,
     updatedAt: "2026-09-29T14:30:00",
-    stages: stages(["تکمیل درخواست", "بررسی منابع انسانی", "تأیید مدیر واحد", "صدور گواهی"], "کارشناس منابع انسانی"),
+    stages: employmentStages,
     fields: [
       { id: "purpose", label: "علت درخواست گواهی", type: "select", required: true, options: ["ارائه به بانک", "ارائه به سفارت", "سایر"] },
       { id: "recipient", label: "نام سازمان مقصد", type: "text", required: true },
@@ -129,6 +222,8 @@ export const initialProcesses: ProcessDefinition[] = [
     rules: ["شماره تماس باید ۱۱ رقم باشد.", "فقط کارکنان فعال امکان ثبت درخواست دارند."],
     applicantGuidance: "علت درخواست و سازمان مقصد را مشخص کنید. نتیجه پس از تأیید مدیر در همین سامانه قابل دریافت است.",
     payment: { mode: "none", provider: "", amount: 0, formula: "" },
+    computedFields: [],
+    publishedVersions: [],
     sourceFileName: "فرم-گواهی-اشتغال.pdf",
     directiveFileNames: [],
   },
@@ -183,7 +278,7 @@ export const initialProcesses: ProcessDefinition[] = [
     version: "1.0",
     activeCases: 5,
     updatedAt: "2026-09-20T08:20:00",
-    stages: stages(["ثبت بازه مرخصی", "بررسی مانده", "تأیید سرپرست"], "سرپرست واحد"),
+    stages: leaveStages,
     fields: [
       { id: "from-date", label: "از تاریخ", type: "date", required: true },
       { id: "to-date", label: "تا تاریخ", type: "date", required: true },

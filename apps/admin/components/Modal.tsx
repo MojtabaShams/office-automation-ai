@@ -39,6 +39,7 @@ export default function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         className={`relative z-10 max-h-[85vh] w-full overflow-y-auto rounded-2xl border p-5 shadow-2xl ${maxWidthClass} ${t.panel}`}
+        dir="rtl"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 id={titleId} className="text-base font-bold">{title}</h2>

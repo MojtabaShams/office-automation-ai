@@ -31,20 +31,25 @@ import ProcessBuilderWizard from "../../components/processes/ProcessBuilderWizar
 import PaymentGatewayManagerModal from "../../components/processes/PaymentGatewayManagerModal";
 import SearchMatchText, { countSearchMatches } from "../../components/SearchMatchText";
 import {
+  FORM_STORAGE_KEY,
   formatPersianNumber,
   formatProcessDate,
+  initialForms,
   initialProcesses,
   PROCESS_DEPARTMENTS,
   PROCESS_STORAGE_KEY,
   saveProcesses,
+  type FormDefinition,
   type ProcessDefinition,
   type ProcessStatus,
 } from "../lib/mock-processes";
+import { ensureFormVersions } from "../lib/mock-forms";
 import {
   PAYMENT_GATEWAYS_STORAGE_KEY,
   savePaymentGateways,
   type PaymentGateway,
 } from "../lib/payment-gateways";
+import { UNIT_LABELS } from "../lib/units";
 
 const STATUS_FILTERS: { value: "all" | ProcessStatus; label: string }[] = [
   { value: "all", label: "همه وضعیت‌ها" },
@@ -97,7 +102,7 @@ function IconForProcess({ icon, className }: { icon: string; className?: string 
   return <Icon className={className} />;
 }
 
-function ProcessPreview({ process, gateways, onClose }: { process: ProcessDefinition; gateways: PaymentGateway[]; onClose: () => void }) {
+function ProcessPreview({ process, gateways, forms, onClose }: { process: ProcessDefinition; gateways: PaymentGateway[]; forms: FormDefinition[]; onClose: () => void }) {
   const { isDarkMode } = useTheme();
   const surface = isDarkMode ? "border-white/10 bg-[#122925]" : "border-[#e1e6df] bg-[#f6f7f4]";
   const muted = isDarkMode ? "text-white/55" : "text-[#68766c]";
@@ -124,7 +129,12 @@ function ProcessPreview({ process, gateways, onClose }: { process: ProcessDefini
             {process.stages.map((stage, index) => (
               <li key={stage.id} className={`flex items-start gap-2 text-xs ${muted}`}>
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#15554f]/10 text-[0.62rem] text-[#15554f]">{index + 1}</span>
-                <span>{stage.title} <span className="opacity-70">· {stage.assigneeRole} · {formatPersianNumber(stage.slaDays)} روز</span></span>
+                <span>
+                  {stage.title} <span className="opacity-70">· {stage.assigneeRole} · {formatPersianNumber(stage.slaDays)} روز</span>
+                  <span className="mt-1 block text-[0.62rem] text-[#15554f]">
+                    {stage.formIds?.length ? stage.formIds.map((formId) => forms.find((form) => form.id === formId)?.title ?? "فرم").join(" · ") : "فرمی انتخاب نشده است"}
+                  </span>
+                </span>
               </li>
             ))}
           </ol>
@@ -139,7 +149,7 @@ function ProcessPreview({ process, gateways, onClose }: { process: ProcessDefini
                     {field.type === "section" ? "بخش" : field.type === "repeater" ? "فهرست تکرارشونده" : field.type === "number" ? "عدد" : field.type === "select" ? "فهرست انتخاب" : field.type === "date" ? "تاریخ" : field.type === "file" ? "فایل" : "متن"}: {field.label}{field.required && " *"}
                   </span>
                   {field.slug && <code dir="ltr" className={`rounded px-1.5 py-0.5 text-[0.6rem] ${isDarkMode ? "bg-white/[0.06] text-white/55" : "bg-[#edf0eb] text-[#68766c]"}`}>{field.slug}</code>}
-                  {field.unit && <span className={`text-[0.62rem] ${muted}`}>واحد: {field.unit}</span>}
+                  {field.unit && <span className={`text-[0.62rem] ${muted}`}>واحد: {UNIT_LABELS[field.unit] ?? field.unit}</span>}
                   {field.condition && <span className={`text-[0.62rem] ${muted}`}>نمایش مشروط</span>}
                 </div>
                 {!!field.subFields?.length && <div className={`mt-2 flex flex-wrap gap-1.5 border-r-2 pr-2 ${isDarkMode ? "border-white/10" : "border-[#d5dad4]"}`}>
@@ -167,6 +177,7 @@ function ProcessPreview({ process, gateways, onClose }: { process: ProcessDefini
 export default function ProcessesPage() {
   const { isDarkMode } = useTheme();
   const [processes, setProcesses] = useState<ProcessDefinition[]>(initialProcesses);
+  const [forms, setForms] = useState<FormDefinition[]>(initialForms);
   const [paymentGateways, setPaymentGateways] = useState<PaymentGateway[]>([]);
   const [query, setQuery] = useState("");
   const [activeMatch, setActiveMatch] = useState(0);
@@ -190,6 +201,14 @@ export default function ProcessesPage() {
     } catch (storageError) {
       console.error("بارگذاری پروسه‌های ذخیره‌شده ناموفق بود:", storageError);
       setError("پروسه‌های ذخیره‌شده بارگذاری نشدند؛ داده‌های نمونه نمایش داده می‌شوند.");
+    }
+    try {
+      const storedForms = window.localStorage.getItem(FORM_STORAGE_KEY);
+      if (storedForms) {
+        setForms(ensureFormVersions(JSON.parse(storedForms) as FormDefinition[]));
+      }
+    } catch (storageError) {
+      console.error("بارگذاری فرم‌های ذخیره‌شده ناموفق بود:", storageError);
     }
     try {
       const storedGateways = window.localStorage.getItem(PAYMENT_GATEWAYS_STORAGE_KEY);
@@ -495,11 +514,11 @@ export default function ProcessesPage() {
       <ProcessBuilderWizard
         open={wizardOpen}
         initial={editing}
-        paymentGateways={paymentGateways}
+        availableForms={forms}
         onClose={() => { setWizardOpen(false); setEditing(null); }}
         onSave={saveDefinition}
       />
-      {preview && <ProcessPreview process={preview} gateways={paymentGateways} onClose={() => setPreview(null)} />}
+      {preview && <ProcessPreview process={preview} gateways={paymentGateways} forms={forms} onClose={() => setPreview(null)} />}
       <PaymentGatewayManagerModal
         open={gatewaysModalOpen}
         gateways={paymentGateways}

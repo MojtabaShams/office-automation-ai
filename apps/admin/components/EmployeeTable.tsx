@@ -20,8 +20,6 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
-  ChevronDown,
-  ChevronUp,
   Download,
   FileSpreadsheet,
   ChevronRight,
@@ -204,7 +202,7 @@ export default function EmployeeTable({
           const isActive = getValue() === "active";
           const activeCls = isDarkMode
             ? "bg-teal-400/15 text-teal-300"
-            :             "bg-[#e4f1e8] text-[#246348]";
+            : "bg-[#e4f1e8] text-[#246348]";
           const inactiveCls = isDarkMode
             ? "bg-[#c96f63]/15 text-[#f0a092]"
             : "bg-[#fff0e9] text-[#a44f46]";
@@ -236,7 +234,7 @@ export default function EmployeeTable({
           (a.original.hireDate as Date).getTime() - (b.original.hireDate as Date).getTime(),
       },
     ],
-    [accessLevels, selectedId, isDarkMode] // eslint-disable-line react-hooks/exhaustive-deps
+    [accessLevels, selectedId, isDarkMode]
   );
 
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -453,8 +451,8 @@ export default function EmployeeTable({
       };
 
   return (
-    <div className={`rounded-2xl border ${t.wrap}`}>
-      <div>
+    <div className={`rounded-2xl border ${t.wrap}`} dir="rtl">
+      <div className="overflow-x-auto">
         <table className="w-full table-fixed text-xs">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -601,7 +599,6 @@ export default function EmployeeTable({
         </table>
       </div>
 
-      {/* صفحه‌بندی */}
       <div className={`flex flex-wrap items-center justify-between gap-3 border-t p-3 ${t.head}`}>
         <div className="flex flex-wrap items-center gap-2">
           <button

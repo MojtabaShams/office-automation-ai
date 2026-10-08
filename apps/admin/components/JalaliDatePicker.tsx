@@ -149,6 +149,7 @@ export default function JalaliDatePicker({
         aria-haspopup="dialog"
         aria-expanded={open}
         className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-sm outline-none transition-colors focus:border-[#15554f] ${theme.control}`}
+        dir="rtl"
       >
         <CalendarDays className={`h-4 w-4 shrink-0 ${theme.muted}`} />
         <span className={value ? "" : theme.muted}>{value ? formatJalali(value) : "انتخاب تاریخ شمسی"}</span>
@@ -168,6 +169,7 @@ export default function JalaliDatePicker({
               maxHeight: position.maxHeight,
             }}
             className={`z-[1100] w-80 max-w-[calc(100vw-16px)] overflow-y-auto rounded-xl border p-3 shadow-xl ${theme.panel}`}
+            dir="rtl"
           >
             <div className="mb-3 flex items-center justify-between gap-2">
               <button

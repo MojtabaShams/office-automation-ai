@@ -102,7 +102,7 @@ export default function EmployeeFormModal({
       title={initial ? "ویرایش کارمند" : "ثبت کارمند جدید"}
       maxWidthClass="max-w-2xl"
     >
-      <div className="space-y-5">
+      <div className="space-y-5" dir="rtl">
         <div className={`flex items-start gap-3 rounded-2xl border p-4 ${t.surface}`}>
           <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${t.icon}`}>
             {initial ? <CircleUserRound className="h-5 w-5" /> : <UserPlus className="h-5 w-5" />}
