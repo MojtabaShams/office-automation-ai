@@ -463,6 +463,7 @@ function ChatPanelInner() {
   const [fileError, setFileError] = useState("");
   const [stepper, setStepper] = useState<ProcessStepperPayload | null>(null);
   const [sideForm, setSideForm] = useState<AgentForm | null>(null);
+  const [mobileTab, setMobileTab] = useState<"chat" | "form">("chat");
   const [busyStage, setBusyStage] = useState(0);
   const [liveActivities, setLiveActivities] = useState<AgentActivity[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -491,7 +492,17 @@ function ChatPanelInner() {
 
   // «ادامه گفتگو» از صفحه تاریخچه: پیام‌ها را از سرور بازیابی می‌کنیم.
   useEffect(() => {
-    if (!continueId) return;
+    setSessionId(null);
+    setMessages([]);
+    setStepper(null);
+    setSideForm(null);
+    if (!continueId) {
+      setText("");
+      setAttachments([]);
+      setFileError("");
+      setPendingAfterAuth(null);
+      return;
+    }
     let cancelled = false;
 
     const restore = async () => {
@@ -828,19 +839,74 @@ function ChatPanelInner() {
   };
 
   const inChat = messages.length > 0;
+  const formPanelOpen = Boolean(stepper || sideForm);
+  const fullChat = inChat && !formPanelOpen;
+
+  useEffect(() => {
+    setMobileTab(formPanelOpen ? "form" : "chat");
+  }, [formPanelOpen]);
 
   return (
     <div
       dir="rtl"
       className={`mx-auto h-full min-h-0 w-full overflow-hidden ${
-        stepper || sideForm
-          ? "[direction:ltr] grid grid-cols-1 gap-0 px-0 py-0 lg:grid-cols-[30rem_minmax(0,1fr)] [&>*]:[direction:rtl]"
-          : `flex flex-col px-4 py-0 ${inChat ? "max-w-[48rem]" : "max-w-[36rem]"}`
+        formPanelOpen
+          ? "[direction:ltr] flex flex-col gap-0 px-0 py-0 xl:grid xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] [&>*]:[direction:rtl]"
+          : `flex flex-col py-0 ${fullChat ? "max-w-none px-0" : "px-4 max-w-[36rem]"}`
       }`}
     >
+      {formPanelOpen && (
+        <div
+          role="tablist"
+          aria-label="نمایش فرم یا گفتگو"
+          className={`mx-4 mt-2 grid shrink-0 grid-cols-2 rounded-xl border p-1 xl:hidden ${
+            isDarkMode
+              ? "border-white/10 bg-white/[0.04]"
+              : "border-[#d5dad4] bg-white/70"
+          }`}
+        >
+          <button
+            type="button"
+            role="tab"
+            id="mobile-chat-tab"
+            aria-selected={mobileTab === "chat"}
+            aria-controls="mobile-chat-panel"
+            onClick={() => setMobileTab("chat")}
+            className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+              mobileTab === "chat"
+                ? "bg-[#15554f] text-white shadow-sm"
+                : t.sub
+            }`}
+          >
+            گفتگو
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="mobile-form-tab"
+            aria-selected={mobileTab === "form"}
+            aria-controls="mobile-form-panel"
+            onClick={() => setMobileTab("form")}
+            className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+              mobileTab === "form"
+                ? "bg-[#15554f] text-white shadow-sm"
+                : t.sub
+            }`}
+          >
+            فرم
+          </button>
+        </div>
+      )}
       <div
-        className={`order-2 flex h-full min-h-0 w-full flex-col ${
-          inChat && !stepper && !sideForm ? "px-2" : "px-4"
+        id={formPanelOpen ? "mobile-chat-panel" : undefined}
+        role={formPanelOpen ? "tabpanel" : undefined}
+        aria-labelledby={formPanelOpen ? "mobile-chat-tab" : undefined}
+        className={`order-2 flex min-h-0 min-w-0 w-full flex-col ${
+          formPanelOpen
+            ? `flex-1 xl:h-full xl:flex-none ${mobileTab === "form" ? "hidden xl:flex" : ""}`
+            : "h-full"
+        } ${
+          fullChat ? "px-0" : "px-4"
         } ${
           inChat
             ? "relative"
@@ -887,9 +953,14 @@ function ChatPanelInner() {
         <div
           ref={messagesScrollRef}
           dir="rtl"
-          className="mb-0 min-h-0 flex-1 overflow-y-auto px-1 pb-56 [scrollbar-gutter:stable]"
+          className={`mb-0 min-h-0 flex-1 overflow-y-auto px-1 [scrollbar-gutter:stable] ${
+            formPanelOpen ? "pb-3" : "pb-56"
+          }`}
         >
-          <div dir="rtl" className="flex min-h-full flex-col justify-end gap-2.5">
+          <div
+            dir="rtl"
+            className="mx-auto flex min-h-full w-full max-w-[52rem] flex-col justify-end gap-2.5"
+          >
           {user && (
             <div
               className={`flex items-center justify-between text-[0.65rem] ${t.sub}`}
@@ -989,24 +1060,34 @@ function ChatPanelInner() {
 
       <div
         className={
-          inChat
-            ? "absolute inset-x-2 bottom-0 z-20 mx-auto w-auto max-w-[34rem]"
+          formPanelOpen
+            ? "relative mt-3 mb-4 w-full max-w-[52rem] shrink-0 self-center"
+            : inChat
+            ? "absolute inset-x-4 bottom-5 z-20 mx-auto w-auto max-w-[52rem]"
             : "mt-5 w-full shrink-0"
         }
       >
         <div
-          className={`rounded-2xl border p-1 shadow-[0_12px_30px_rgba(40,68,61,0.12)] ${t.boxOuter}`}
+          className={
+            inChat
+              ? `rounded-3xl border p-1 shadow-[0_8px_24px_rgba(40,68,61,0.14)] ${t.boxOuter}`
+              : `rounded-2xl border p-1 shadow-[0_12px_30px_rgba(40,68,61,0.12)] ${t.boxOuter}`
+          }
           style={{ background: t.boxOuterBg }}
         >
-          <div
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[0.7rem] ${t.banner}`}
-          >
-            <Sparkles className="h-3.5 w-3.5 text-[#4f7aab]" />
-            <span>با هوش مصنوعی کارهای اداری را سریع‌تر انجام دهید</span>
-          </div>
+          {!inChat && (
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[0.7rem] ${t.banner}`}
+            >
+              <Sparkles className="h-3.5 w-3.5 text-[#4f7aab]" />
+              <span>با هوش مصنوعی کارهای اداری را سریع‌تر انجام دهید</span>
+            </div>
+          )}
 
           <div
-            className="relative min-h-[6.5rem] rounded-xl px-2 pb-2 pt-1"
+            className={`relative px-2 pb-2 pt-1 ${
+              inChat ? "min-h-[5.25rem] rounded-[1.35rem]" : "min-h-[6.5rem] rounded-xl"
+            }`}
             style={{ background: t.boxInnerBg }}
           >
           {attachments.length > 0 || uploading ? (
@@ -1060,7 +1141,9 @@ function ChatPanelInner() {
             }}
             aria-label="درخواست جدید"
             placeholder="درخواستت را بنویس... (مثلاً: فرم مرخصی می‌خوام)"
-            className="h-24 w-full resize-none bg-transparent p-2 pb-9 text-right text-sm outline-none placeholder:text-current placeholder:opacity-35"
+            className={`w-full resize-none bg-transparent p-2 text-right text-sm outline-none placeholder:text-current placeholder:opacity-35 ${
+              inChat ? "h-16 pb-8" : "h-24 pb-9"
+            }`}
             disabled={busy}
           />
 
@@ -1133,7 +1216,15 @@ function ChatPanelInner() {
       )}
       </div>
       {(stepper || sideForm) && (
-        <aside className="order-1 flex h-full min-h-0 w-full items-stretch overflow-hidden" aria-label="پنل فرم و فرآیند">
+        <aside
+          id="mobile-form-panel"
+          role="tabpanel"
+          aria-labelledby="mobile-form-tab"
+          className={`order-1 flex min-h-0 min-w-0 w-full flex-1 items-stretch overflow-hidden xl:h-full xl:flex-none ${
+            mobileTab === "chat" ? "hidden xl:flex" : ""
+          }`}
+          aria-label="پنل فرم و فرآیند"
+        >
           {stepper ? (
             <ProcessStepper
               payload={stepper}

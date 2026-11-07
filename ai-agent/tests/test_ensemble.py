@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
-from app.agents import ensemble, nodes
+from app.agents import activity, ensemble, nodes
 from app.agents.ensemble import Candidate, EnsembleTurn, model_label, normalize_actions, pick_winner
 
 
@@ -329,3 +329,30 @@ def test_advisor_uses_the_ensemble_and_keeps_the_envelope(monkeypatch: pytest.Mo
     assert result["messages"][0].content == reply
     assert result["answer_model"] == "gemini-2.5-flash"
     assert result["ensemble_trace"]
+
+
+def test_advisor_marks_deterministic_fallback_when_no_provider_is_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(nodes, "get_llm", lambda: None)
+    monkeypatch.setattr(nodes.settings, "GAPGPT_API_KEY", "")
+    monkeypatch.setattr(nodes.settings, "GROQ_API_KEY", "")
+    monkeypatch.setattr(nodes.settings, "OPENAI_API_KEY", "")
+    activity.reset()
+
+    result = nodes.advisor(
+        {
+            "messages": [HumanMessage(content="ساعت کاری چیست؟")],
+            "intent": "general",
+            "pending_form_id": None,
+            "context": "",
+        },
+        {"configurable": {"db": None}},
+    )
+
+    assert result["messages"][0].content
+    assert {
+        "key": "model_fallback",
+        "label": "مدل زبانی در دسترس نبود؛ پاسخ جایگزین ارائه شد.",
+    } in activity.collected()
+    activity.reset()

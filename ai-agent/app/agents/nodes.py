@@ -245,6 +245,7 @@ def advisor(state: AgentState, config: RunnableConfig) -> dict:
         logger.warning("Every ensemble member failed; falling back. %s", trace)
 
     if llm is None:
+        activity.record("model_fallback")
         reply = _fallback_reply(state, db)
         return {"messages": [AIMessage(content=reply)], "pending_form_id": pending}
 
