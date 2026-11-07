@@ -1,21 +1,29 @@
 "use client";
 
-import type { ReactNode } from "react";
+import React from "react";
 
-export function countSearchMatches(text: string, query: string) {
+/** تعداد تکرار query در یک متن (بدون درنظرگرفتن بزرگی/کوچکی حروف) */
+export function countSearchMatches(text: string, query: string): number {
   if (!query) return 0;
-  const normalizedText = text.toLocaleLowerCase("fa");
-  const normalizedQuery = query.toLocaleLowerCase("fa");
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
   let count = 0;
-  let cursor = 0;
+  let idx = 0;
   while (true) {
-    const found = normalizedText.indexOf(normalizedQuery, cursor);
-    if (found === -1) return count;
+    const found = t.indexOf(q, idx);
+    if (found === -1) break;
     count += 1;
-    cursor = found + normalizedQuery.length;
+    idx = found + q.length;
   }
+  return count;
 }
 
+/**
+ * متن را با هایلایت نتایج جستجو رندر می‌کند (مثل Ctrl+F مرورگر).
+ * شماره‌ی هر نتیجه از روی startIndex (که از قبل و بدون هیچ متغیر مشترکی
+ * محاسبه شده) به‌دست می‌آید، نه از یک شمارنده‌ی سراسری در حین رندر —
+ * برای جلوگیری از بی‌نظمی در پیمایش بین نتایج.
+ */
 export default function SearchMatchText({
   text,
   query,
@@ -27,32 +35,37 @@ export default function SearchMatchText({
   query: string;
   startIndex: number;
   activeIndex: number;
-  registerRef: (index: number, element: HTMLElement | null) => void;
+  registerRef: (idx: number, el: HTMLElement | null) => void;
 }) {
   if (!query) return <>{text}</>;
 
-  const normalizedText = text.toLocaleLowerCase("fa");
-  const normalizedQuery = query.toLocaleLowerCase("fa");
-  const parts: ReactNode[] = [];
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
+  const parts: React.ReactNode[] = [];
   let cursor = 0;
-  let matchOffset = 0;
+  let local = 0;
 
   while (true) {
-    const found = normalizedText.indexOf(normalizedQuery, cursor);
+    const found = t.indexOf(q, cursor);
     if (found === -1) {
       parts.push(text.slice(cursor));
       break;
     }
     if (found > cursor) parts.push(text.slice(cursor, found));
-    const matchIndex = startIndex + matchOffset;
-    matchOffset += 1;
+
+    const myIdx = startIndex + local;
+    local += 1;
+    const isActive = myIdx === activeIndex;
+
     parts.push(
       <mark
-        key={`${matchIndex}-${found}`}
-        ref={(element) => registerRef(matchIndex, element)}
-        className={matchIndex === activeIndex
-          ? "rounded bg-orange-400 px-0.5 text-black"
-          : "rounded bg-yellow-300/70 px-0.5 text-black"}
+        key={`${myIdx}-${found}`}
+        ref={(el) => registerRef(myIdx, el)}
+        className={
+          isActive
+            ? "rounded bg-orange-400 px-0.5 text-black"
+            : "rounded bg-yellow-300/70 px-0.5 text-black"
+        }
       >
         {text.slice(found, found + query.length)}
       </mark>

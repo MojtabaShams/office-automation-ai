@@ -129,7 +129,7 @@ export default function AdminTopBar() {
   );
 
   return (
-    <div className="relative z-30 shrink-0">
+    <div className="relative z-45 shrink-0">
       <header
         className={`grid min-h-14 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-x-0 border-t-0 px-3 py-2 backdrop-blur-md sm:px-4 ${
           isDarkMode

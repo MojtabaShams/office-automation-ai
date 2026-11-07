@@ -1,56 +1,367 @@
 "use client";
 
 import React from "react";
-import { Users, ClipboardList, Workflow, MessageSquare } from "lucide-react";
+import Link from "next/link";
+import {
+  Users,
+  ClipboardList,
+  MessageSquare,
+  User,
+  ChevronLeft,
+  Circle,
+  Shield,
+  LogIn,
+} from "lucide-react";
 import { useTheme } from "../theme-context";
+import AnalogClock from "./AnalogClock";
 
-const stats = [
-  { icon: Users, label: "کارمندان فعال", value: "۴۲" },
-  { icon: ClipboardList, label: "درخواست‌های باز", value: "۱۸" },
-  { icon: Workflow, label: "پروسه‌های در جریان", value: "۷" },
-  { icon: MessageSquare, label: "پیام‌های خوانده‌نشده", value: "۵" },
+/* ---------- داده‌های نمایشی (موقت) ---------- */
+const pendingRequests = [
+  { id: 1, title: "درخواست مرخصی استحقاقی", employee: "سارا احمدی", status: "در انتظار", time: "۰۹:۴۵" },
+  { id: 2, title: "درخواست خرید تجهیزات", employee: "رضا کریمی", status: "تأیید اولیه", time: "دیروز" },
+  { id: 3, title: "درخواست دورکاری", employee: "مینا رضایی", status: "در انتظار", time: "۱۱:۲۰" },
+  { id: 4, title: "درخواست مأموریت", employee: "علی محمدی", status: "در انتظار", time: "دیروز" },
 ];
 
-/**
- * این کامپوننت فعلاً یک داشبورد نمایشی و موقت است.
- * ساختار نهایی صفحه‌ی اصلی ادمین بعداً همین‌جا (در همین فایل) تکمیل می‌شود.
- */
+const activeEmployees = [
+  { id: 1, name: "سارا احمدی", role: "کارشناس منابع انسانی", status: "آنلاین" },
+  { id: 2, name: "رضا کریمی", role: "توسعه‌دهنده", status: "آنلاین" },
+  { id: 3, name: "مینا رضایی", role: "طراح UI", status: "مشغول" },
+  { id: 4, name: "حسین نوری", role: "مدیر پروژه", status: "آنلاین" },
+  { id: 5, name: "فاطمه زارعی", role: "حسابدار", status: "آنلاین" },
+];
+
+const todayMessages = [
+  { id: 1, from: "سارا احمدی", text: "سلام، فایل گزارش ماهانه رو فرستادم.", time: "۱۰:۱۲" },
+  { id: 2, from: "رضا کریمی", text: "سیستم تیکتینگ یه باگ داره، لطفاً بررسی کنید.", time: "۰۹:۴۸" },
+  { id: 3, from: "مینا رضایی", text: "طراحی صفحه جدید آماده شد.", time: "۰۹:۱۵" },
+  { id: 4, from: "حسین نوری", text: "جلسه ساعت ۱۴ برگزار می‌شه.", time: "۰۸:۵۰" },
+];
+
 export default function AdminHome() {
   const { isDarkMode } = useTheme();
 
   const t = isDarkMode
     ? {
-        text: "text-white",
-        sub: "text-white/60",
-        card: "border-white/10 bg-[#193632]",
-        iconWrap: "bg-white/[0.08] text-slate-300",
-      }
+      text: "text-white",
+      sub: "text-white/60",
+      card: "border-white/10 bg-[#193632]",
+      cardHover: "hover:bg-[#1f403b]",
+      iconWrap: "bg-white/[0.08] text-slate-300",
+      badge: "bg-[#15554f]/40 text-[#7dd3c0]",
+      statusOnline: "text-emerald-400",
+      statusBusy: "text-amber-400",
+      divider: "border-white/10",
+      softBg: "bg-white/[0.04]",
+    }
     : {
-        text: "text-[#28443d]",
-        sub: "text-[#68766c]",
-        card: "border-[#d5dad4] bg-[#fafbf9]",
-        iconWrap: "bg-[#e9dfcc] text-[#15554f]",
-      };
+      text: "text-[#28443d]",
+      sub: "text-[#68766c]",
+      card: "border-[#d5dad4] bg-[#fafbf9]",
+      cardHover: "hover:bg-[#f3f5f1]",
+      iconWrap: "bg-[#e9dfcc] text-[#15554f]",
+      badge: "bg-[#e9dfcc] text-[#15554f]",
+      statusOnline: "text-emerald-600",
+      statusBusy: "text-amber-600",
+      divider: "border-[#d5dad4]",
+      softBg: "bg-[#f1eee5]",
+    };
 
   return (
-    <div className={`w-full ${t.text}`}>
-      <h1 className="mb-1 text-xl font-black">صفحه اصلی</h1>
-      <p className={`mb-6 text-xs ${t.sub}`}>نمای کلی وضعیت سامانه.</p>
-
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {stats.map(({ icon: Icon, label, value }) => (
-          <div key={label} className={`rounded-2xl border p-4 text-right ${t.card}`}>
-            <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-xl ${t.iconWrap}`}>
-              <Icon className="h-4.5 w-4.5" />
+    <div className={`w-full space-y-5 ${t.text}`}>
+      {/* ========== ردیف بالا: ساعت + اطلاعات کاربر ========== */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* کاشی ساعت و تقویم‌ها */}
+        <section className={`rounded-2xl border p-5 ${t.card}`}>
+          {/* هدر */}
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-bold">
+              <span className={isDarkMode ? "text-[#7dd3c0]" : "text-[#b45309]"}>
+                {new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                }).format(new Date())}
+              </span>
+              <span className={`mx-1 ${t.sub}`}>|</span>
+              <span>ساعت و تقویم ایران</span>
             </div>
-            <div className="text-2xl font-black">{value}</div>
-            <div className={`mt-1 text-[0.7rem] ${t.sub}`}>{label}</div>
           </div>
-        ))}
-      </div>
 
-      <div className={`mt-4 rounded-2xl border p-6 text-center text-sm ${t.card} ${t.sub}`}>
-        محتوای اصلی این صفحه به‌زودی طراحی می‌شود.
+          {/* بدنه: ساعت سمت راست + تاریخ‌ها وسط */}
+          <div className="flex items-center justify-between gap-6">
+            {/* ساعت آنالوگ - سمت راست */}
+            <div className="shrink-0">
+              <AnalogClock />
+            </div>
+
+            {/* سه تاریخ - وسط */}
+            <div className="flex flex-1 justify-center">
+              <div className="grid grid-cols-1 gap-6 text-center sm:grid-cols-3 sm:gap-10">
+                {/* تاریخ خورشیدی */}
+                <div>
+                  <div className={`text-[0.7rem] font-medium ${isDarkMode ? "text-[#7dd3c0]" : "text-[#b45309]"}`}>
+                    تاریخ خورشیدی
+                  </div>
+                  <div className="mt-1 text-sm font-bold">
+                    {new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+                      year: "numeric",
+                      month: "2-digit",
+                      day: "2-digit",
+                    }).format(new Date())}
+                  </div>
+                  <div className={`mt-0.5 text-[0.75rem] ${t.sub}`}>
+                    {new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                    }).format(new Date())}
+                  </div>
+                </div>
+
+                {/* تاریخ میلادی */}
+                <div>
+                  <div className={`text-[0.7rem] font-medium ${isDarkMode ? "text-[#7dd3c0]" : "text-[#b45309]"}`}>
+                    تاریخ میلادی
+                  </div>
+                  <div className="mt-1 text-sm font-bold">
+                    {new Intl.DateTimeFormat("en-CA", {
+                      year: "numeric",
+                      month: "2-digit",
+                      day: "2-digit",
+                    }).format(new Date())}
+                  </div>
+                  <div className={`mt-0.5 text-[0.75rem] ${t.sub}`}>
+                    {new Intl.DateTimeFormat("en-GB", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    }).format(new Date())}
+                  </div>
+                </div>
+
+                {/* تاریخ قمری */}
+                <div>
+                  <div className={`text-[0.7rem] font-medium ${isDarkMode ? "text-[#7dd3c0]" : "text-[#b45309]"}`}>
+                    تاریخ قمری
+                  </div>
+                  <div className="mt-1 text-sm font-bold">
+                    {new Intl.DateTimeFormat("fa-IR-u-ca-islamic", {
+                      year: "numeric",
+                      month: "2-digit",
+                      day: "2-digit",
+                    }).format(new Date())}
+                  </div>
+                  <div className={`mt-0.5 text-[0.75rem] ${t.sub}`}>
+                    {new Intl.DateTimeFormat("fa-IR-u-ca-islamic", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                    }).format(new Date())}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* کاشی اطلاعات کاربر */}
+        <section className={`rounded-2xl border p-5 ${t.card}`}>
+          {/* بالای کارت */}
+          <div className="flex items-center gap-4">
+            {/* آواتار گرد با حلقه وضعیت */}
+            <div className="relative shrink-0">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[#276e63] to-[#174b46] text-white shadow-lg ring-2 ring-white/20">
+                <User className="h-7 w-7" />
+              </div>
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="truncate text-lg font-black">علی محمدی</h3>
+                <span className={`rounded-full px-2 py-0.5 text-[0.65rem] font-medium ${t.badge}`}>
+                  آنلاین
+                </span>
+              </div>
+              <p className={`mt-0.5 text-sm ${t.sub}`}>مدیر سیستم · Super Admin</p>
+            </div>
+          </div>
+
+          {/* خط جداکننده */}
+          <div className={`my-4 h-px ${isDarkMode ? "bg-white/10" : "bg-[#d5dad4]"}`} />
+
+          {/* اطلاعات */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className={`rounded-xl p-3 ${t.softBg}`}>
+              <div className={`mb-1 text-[0.65rem] ${t.sub}`}>آخرین ورود</div>
+              <div className="flex items-center gap-1.5 text-sm font-bold">
+                <LogIn className="h-3.5 w-3.5 opacity-70" />
+                امروز · ۰۸:۴۲
+              </div>
+            </div>
+
+            <div className={`rounded-xl p-3 ${t.softBg}`}>
+              <div className={`mb-1 text-[0.65rem] ${t.sub}`}>نقش کاربری</div>
+              <div className="flex items-center gap-1.5 text-sm font-bold">
+                <Shield className="h-3.5 w-3.5 opacity-70" />
+                Super Admin
+              </div>
+            </div>
+          </div>
+
+          {/* دکمه‌های پایین */}
+          <div className="mt-4 flex gap-2">
+            <Link
+              href="/profile"
+              className={`flex flex-1 items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-medium transition-colors ${isDarkMode
+                ? "border-white/15 bg-white/5 text-white hover:bg-white/10"
+                : "border-[#d5dad4] bg-white text-[#28443d] hover:bg-[#f3f5f1]"
+                }`}
+            >
+              <User className="h-4 w-4" />
+              حساب کاربری
+            </Link>
+
+            <button
+              type="button"
+              className={`flex flex-1 items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-medium transition-colors ${isDarkMode
+                ? "border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                }`}
+            >
+              <LogIn className="h-4 w-4 rotate-180" />
+              خروج
+            </button>
+          </div>
+        </section>
+      </div>
+      {/* ========== گرید پایین ========== */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {/* درخواست‌های امروز / مانده */}
+        <section className={`rounded-2xl border ${t.card}`}>
+          <div className={`flex items-center justify-between border-b px-4 py-3 ${t.divider}`}>
+            <div className="flex items-center gap-2">
+              <div className={`flex h-8 w-8 items-center justify-center rounded-xl ${t.iconWrap}`}>
+                <ClipboardList className="h-4 w-4" />
+              </div>
+              <h2 className="text-sm font-bold">درخواست‌های امروز و مانده</h2>
+            </div>
+            <Link
+              href="/requests"
+              className={`flex items-center gap-1 text-[0.7rem] font-medium ${t.sub} hover:opacity-80`}
+            >
+              مشاهده همه
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          <div className="divide-y divide-current/5">
+            {pendingRequests.map((req) => (
+              <div
+                key={req.id}
+                className={`flex items-start justify-between gap-3 px-4 py-3 transition-colors ${t.cardHover}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">{req.title}</div>
+                  <div className={`mt-0.5 text-[0.7rem] ${t.sub}`}>{req.employee}</div>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <span className={`rounded-full px-2 py-0.5 text-[0.65rem] font-medium ${t.badge}`}>
+                    {req.status}
+                  </span>
+                  <span className={`text-[0.65rem] ${t.sub}`}>{req.time}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* کارمندان فعال امروز */}
+        <section className={`rounded-2xl border ${t.card}`}>
+          <div className={`flex items-center justify-between border-b px-4 py-3 ${t.divider}`}>
+            <div className="flex items-center gap-2">
+              <div className={`flex h-8 w-8 items-center justify-center rounded-xl ${t.iconWrap}`}>
+                <Users className="h-4 w-4" />
+              </div>
+              <h2 className="text-sm font-bold">کارمندان فعال امروز</h2>
+            </div>
+            <Link
+              href="/employees"
+              className={`flex items-center gap-1 text-[0.7rem] font-medium ${t.sub} hover:opacity-80`}
+            >
+              مشاهده همه
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          <div className="divide-y divide-current/5">
+            {activeEmployees.map((emp) => (
+              <div
+                key={emp.id}
+                className={`flex items-center gap-3 px-4 py-3 transition-colors ${t.cardHover}`}
+              >
+                <div
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${isDarkMode ? "bg-[#15554f] text-white" : "bg-[#15554f] text-white"
+                    }`}
+                >
+                  {emp.name
+                    .trim()
+                    .split(/\s+/)
+                    .slice(0, 2)
+                    .map((p) => p[0] || "")
+                    .join("")}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">{emp.name}</div>
+                  <div className={`truncate text-[0.7rem] ${t.sub}`}>{emp.role}</div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Circle
+                    className={`h-2 w-2 fill-current ${emp.status === "آنلاین" ? t.statusOnline : t.statusBusy
+                      }`}
+                  />
+                  <span className={`text-[0.65rem] ${t.sub}`}>{emp.status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* پیام‌های امروز */}
+        <section className={`rounded-2xl border ${t.card}`}>
+          <div className={`flex items-center justify-between border-b px-4 py-3 ${t.divider}`}>
+            <div className="flex items-center gap-2">
+              <div className={`flex h-8 w-8 items-center justify-center rounded-xl ${t.iconWrap}`}>
+                <MessageSquare className="h-4 w-4" />
+              </div>
+              <h2 className="text-sm font-bold">پیام‌های امروز</h2>
+            </div>
+            <Link
+              href="/messages"
+              className={`flex items-center gap-1 text-[0.7rem] font-medium ${t.sub} hover:opacity-80`}
+            >
+              مشاهده همه
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          <div className="divide-y divide-current/5">
+            {todayMessages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`px-4 py-3 transition-colors ${t.cardHover}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{msg.from}</span>
+                  <span className={`text-[0.65rem] ${t.sub}`}>{msg.time}</span>
+                </div>
+                <p className={`mt-1 line-clamp-1 text-[0.75rem] ${t.sub}`}>{msg.text}</p>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );

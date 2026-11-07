@@ -84,7 +84,7 @@ export default function PaymentGatewayManagerModal({
   return (
     <>
       <Modal open={open} onClose={() => { resetForm(); setStatusMessage(""); onClose(); }} title="مدیریت درگاه‌های پرداخت" maxWidthClass="max-w-3xl">
-        {statusMessage && <p role="status" className="mb-3 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">{statusMessage}</p>}
+        {statusMessage && <p role="status" className={`mb-3 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs ${isDarkMode ? "text-emerald-300" : "text-emerald-700"}`}>{statusMessage}</p>}
         {(operationError || validationError) && <p role="alert" className="mb-3 rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs text-rose-600">{validationError || operationError}</p>}
 
         <form onSubmit={save} className={`mb-5 rounded-2xl border p-4 ${card}`}>

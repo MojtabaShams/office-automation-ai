@@ -64,23 +64,25 @@ export default function Sidebar() {
 
   const c = isDarkMode
     ? {
-      aside: "border-white/10 bg-[#122925] md:border-transparent md:bg-transparent",
+        // تیره‌تر + سایه قوی‌تر + لبه‌های گرد
+        aside: "border-white/10 bg-[#0e211e] shadow-[-12px_0_28px_-6px_rgba(0,0,0,0.55)] rounded-l-2xl md:border-transparent",
         line: "border-white/10",
         text: "text-white/70 hover:text-white",
         circle:
           "bg-white/[0.08] hover:bg-white/[0.18] border border-white/[0.12] backdrop-blur-sm",
-      group: "bg-[#193632] border border-white/[0.12] backdrop-blur-sm",
+        group: "bg-[#193632] border border-white/[0.12] backdrop-blur-sm",
         strong: "text-white",
-      burger: "border-white/15 bg-[#193632] text-white",
+        burger: "border-white/15 bg-[#193632] text-white",
       }
     : {
-      aside: "border-[#d5dad4] bg-[#efede7] md:border-transparent md:bg-transparent",
-      line: "border-[#d5dad4]",
-      text: "text-[#53665b] hover:text-[#28443d]",
-      circle: "bg-white/70 hover:bg-white border border-[#d5dad4]",
-      group: "bg-[#edf0eb] border border-[#d5dad4]",
-      strong: "text-[#28443d]",
-      burger: "border-[#d5dad4] bg-[#edf0eb] text-[#28443d]",
+        // کمی تیره‌تر + سایه ملایم + لبه‌های گرد
+        aside: "border-[#c8cec4] bg-[#e4e2db] shadow-[-10px_0_24px_-4px_rgba(40,68,61,0.18)] rounded-l-2xl md:border-transparent",
+        line: "border-[#d5dad4]",
+        text: "text-[#53665b] hover:text-[#28443d]",
+        circle: "bg-white/70 hover:bg-white border border-[#d5dad4]",
+        group: "bg-[#edf0eb] border border-[#d5dad4]",
+        strong: "text-[#28443d]",
+        burger: "border-[#d5dad4] bg-[#edf0eb] text-[#28443d]",
       };
 
   const circleBtn =

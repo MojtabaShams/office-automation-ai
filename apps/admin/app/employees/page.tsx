@@ -51,8 +51,10 @@ export default function EmployeesPage() {
   const [filteredCount, setFilteredCount] = useState(initialEmployees.length);
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   const [calendarLogWarning, setCalendarLogWarning] = useState("");
+
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [toolbarHeight, setToolbarHeight] = useState(0);
+  const [mainPaddingTop, setMainPaddingTop] = useState(0);
 
   const [permissionsOpen, setPermissionsOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -63,13 +65,25 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     const toolbar = toolbarRef.current;
+    const main = document.getElementById("admin-main-scroll");
     if (!toolbar) return;
 
-    const updateHeight = () => setToolbarHeight(toolbar.getBoundingClientRect().height);
-    updateHeight();
-    const observer = new ResizeObserver(updateHeight);
+    const updateMetrics = () => {
+      setToolbarHeight(toolbar.offsetHeight);
+      if (main) {
+        setMainPaddingTop(parseFloat(getComputedStyle(main).paddingTop) || 0);
+      }
+    };
+
+    updateMetrics();
+    const observer = new ResizeObserver(updateMetrics);
     observer.observe(toolbar);
-    return () => observer.disconnect();
+    if (main) observer.observe(main);
+    window.addEventListener("resize", updateMetrics);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateMetrics);
+    };
   }, []);
 
   const selectedEmployee = employees.find((e) => e.id === selectedId) ?? null;
@@ -96,21 +110,21 @@ export default function EmployeesPage() {
 
   const t = isDarkMode
     ? {
-        text: "text-white",
-        sub: "text-white/50",
-        toolbar: "border-white/10 bg-[#193632]/90 shadow-sm shadow-black/10",
-        input: "border-white/10 bg-white/[0.06] text-white placeholder:text-white/40",
-        chip: "border-white/15 bg-white/[0.08] text-slate-100 hover:bg-white/[0.14]",
-        primary: "bg-[#15554f] text-white hover:bg-[#246b61]",
-      }
+      text: "text-white",
+      sub: "text-white/50",
+      toolbar: "border-white/10 bg-[#193632]/90 shadow-sm shadow-black/10 backdrop-blur-md",
+      input: "border-white/10 bg-white/[0.06] text-white placeholder:text-white/40",
+      chip: "border-white/15 bg-white/[0.08] text-slate-100 hover:bg-white/[0.14]",
+      primary: "bg-[#15554f] text-white hover:bg-[#246b61]",
+    }
     : {
-        text: "text-[#28443d]",
-        sub: "text-[#68766c]",
-        toolbar: "border-[#d5dad4] bg-[#edf0eb]",
-        input: "border-[#d5dad4] bg-[#fafbf9] text-[#28443d] placeholder:text-[#8c9587]",
-        chip: "border-[#d5dad4] bg-[#fafbf9] text-[#40584e] hover:bg-[#edf0eb]",
-        primary: "bg-[#15554f] text-white hover:bg-[#246b61]",
-      };
+      text: "text-[#28443d]",
+      sub: "text-[#68766c]",
+      toolbar: "border-[#d5dad4] bg-[#edf0eb]/90 shadow-sm backdrop-blur-md",
+      input: "border-[#d5dad4] bg-[#fafbf9] text-[#28443d] placeholder:text-[#8c9587]",
+      chip: "border-[#d5dad4] bg-[#fafbf9] text-[#40584e] hover:bg-[#edf0eb]",
+      primary: "bg-[#15554f] text-white hover:bg-[#246b61]",
+    };
 
   const handleAddAccessLevel = (level: AccessLevel) => {
     setAccessLevels((prev) => [...prev, level]);
@@ -202,10 +216,11 @@ export default function EmployeesPage() {
         </p>
       )}
 
-      {/* نوار ابزار */}
+      {/* نوار ابزار با قابلیت sticky */}
       <div
         ref={toolbarRef}
-        className={`sticky top-0 z-30 mb-4 flex flex-wrap items-center gap-2 rounded-2xl border p-3 ${t.toolbar}`}
+        className={`sticky z-30 mb-3 flex flex-wrap items-center gap-2 rounded-2xl border p-3 ${t.toolbar}`}
+        style={{ top: -mainPaddingTop }}
       >
         <button
           type="button"
@@ -324,11 +339,10 @@ export default function EmployeesPage() {
             </button>
             {showColumnMenu && (
               <div
-                className={`absolute left-0 top-full z-50 mt-2 w-56 rounded-xl border p-2 shadow-xl ${
-                  isDarkMode
-                    ? "border-white/10 bg-[#17332f] text-white"
-                    : "border-[#d5dad4] bg-[#fafbf9] text-[#28443d]"
-                }`}
+                className={`absolute left-0 top-full z-50 mt-2 w-56 rounded-xl border p-2 shadow-xl ${isDarkMode
+                  ? "border-white/10 bg-[#17332f] text-white"
+                  : "border-[#d5dad4] bg-[#fafbf9] text-[#28443d]"
+                  }`}
               >
                 {employeeColumns.map(({ id, label }) => (
                   <label
@@ -359,6 +373,7 @@ export default function EmployeesPage() {
 
       </div>
 
+      {/* جدول مستقیماً بدون فاصله بالا (حذف mt-4) قرار می‌گیرد */}
       <EmployeeTable
         data={employees}
         accessLevels={accessLevels}
@@ -372,7 +387,7 @@ export default function EmployeesPage() {
         activeMatch={activeMatch}
         onActiveMatchChange={setActiveMatch}
         onMatchCountChange={setTotalMatches}
-        stickyHeaderTop={toolbarHeight}
+        stickyHeaderTop={toolbarHeight - mainPaddingTop}
       />
 
       <PermissionsModal

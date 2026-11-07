@@ -208,14 +208,12 @@ export default function EmployeeTable({
             : "bg-[#fff0e9] text-[#a44f46]";
           return (
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.65rem] font-medium ${
-                isActive ? activeCls : inactiveCls
-              }`}
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.65rem] font-medium ${isActive ? activeCls : inactiveCls
+                }`}
             >
               <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  isActive ? "bg-emerald-500" : "bg-red-500"
-                }`}
+                className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-emerald-500" : "bg-red-500"
+                  }`}
               />
               {isActive ? "فعال" : "غیرفعال"}
             </span>
@@ -430,31 +428,31 @@ export default function EmployeeTable({
 
   const t = isDarkMode
     ? {
-        wrap: "border-white/10 bg-[#193632]",
-        head: "bg-white/[0.04] text-slate-200 border-white/10",
-        row: "border-white/5 hover:bg-white/[0.03]",
-        rowSelected: "bg-[#15554f]/25",
-        sub: "text-slate-400",
-        input: "border-white/10 bg-white/[0.06] text-white placeholder:text-white/35",
-        chip: "border-white/10 bg-white/[0.05] text-slate-300 hover:bg-white/10",
-        panel: "border-white/10 bg-[#17332f] text-white",
-      }
+      wrap: "border-white/10 bg-[#193632]",
+      head: "bg-[#193632] text-slate-200 border-white/10",
+      row: "border-white/5 hover:bg-white/[0.03]",
+      rowSelected: "bg-[#15554f]/25",
+      sub: "text-slate-400",
+      input: "border-white/10 bg-white/[0.06] text-white placeholder:text-white/35",
+      chip: "border-white/10 bg-white/[0.05] text-slate-300 hover:bg-white/10",
+      panel: "border-white/10 bg-[#17332f] text-white",
+    }
     : {
-        wrap: "border-[#d5dad4] bg-[#fafbf9]",
-        head: "bg-[#edf0eb] text-[#40584e] border-[#d5dad4]",
-        row: "border-[#e6e9e3] hover:bg-[#f6f7f4]",
-        rowSelected: "bg-[#e2eee8]",
-        sub: "text-[#718074]",
-        input: "border-[#d5dad4] bg-[#fafbf9] text-[#28443d] placeholder:text-[#8c9587]",
-        chip: "border-[#d5dad4] bg-[#fafbf9] text-[#40584e] hover:bg-[#edf0eb]",
-        panel: "border-[#d5dad4] bg-[#fafbf9] text-[#28443d]",
-      };
+      wrap: "border-[#d5dad4] bg-[#fafbf9]",
+      head: "bg-[#edf0eb] text-[#40584e] border-[#d5dad4]",
+      row: "border-[#e6e9e3] hover:bg-[#f6f7f4]",
+      rowSelected: "bg-[#e2eee8]",
+      sub: "text-[#718074]",
+      input: "border-[#d5dad4] bg-[#fafbf9] text-[#28443d] placeholder:text-[#8c9587]",
+      chip: "border-[#d5dad4] bg-[#fafbf9] text-[#40584e] hover:bg-[#edf0eb]",
+      panel: "border-[#d5dad4] bg-[#fafbf9] text-[#28443d]",
+    };
 
   return (
     <div className={`rounded-2xl border ${t.wrap}`} dir="rtl">
-      <div className="overflow-x-auto">
-        <table className="w-full table-fixed text-xs">
-          <thead>
+      <div className="min-w-0">
+        <table className="w-full table-fixed border-separate border-spacing-0 text-xs">
+          <thead className={t.head}>
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className={`border-b ${t.head}`}>
                 {headerGroup.headers.map((header) => (
@@ -464,9 +462,9 @@ export default function EmployeeTable({
                       width: `${(header.getSize() / visibleColumnSize) * 100}%`,
                       position: "sticky",
                       top: stickyHeaderTop,
-                      zIndex: 20,
+                      zIndex: 25,
                     }}
-                    className={`select-none p-0 align-top ${t.head}`}
+                    className={`select-none p-0 align-top shadow-[0_1px_0_0_rgba(0,0,0,0.06)] ${t.head}`}
                   >
                     <div className="flex items-center justify-between gap-1 px-2 py-2">
                       <button
@@ -534,34 +532,31 @@ export default function EmployeeTable({
               <tr
                 key={row.id}
                 onClick={() => onSelect(selectedId === row.original.id ? null : row.original.id)}
-                className={`cursor-pointer border-b transition-colors ${t.row} ${
-                  selectedId === row.original.id ? t.rowSelected : ""
-                }`}
+                className={`cursor-pointer border-b transition-colors ${t.row} ${selectedId === row.original.id ? t.rowSelected : ""
+                  }`}
               >
                 {row.getVisibleCells().map((cell) => (
                   <td
                     key={cell.id}
                     style={{ width: `${(cell.column.getSize() / visibleColumnSize) * 100}%` }}
-                    className="break-words px-2 py-2.5"
+                    className="relative z-0 break-words px-2 py-2.5"
                   >
                     {cell.column.id === "select" ? (
                       flexRender(cell.column.columnDef.cell, cell.getContext())
                     ) : cell.column.id === "status" ? (
                       <span
-                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.65rem] font-medium ${
-                          row.original.status === "active"
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.65rem] font-medium ${row.original.status === "active"
                             ? isDarkMode
                               ? "bg-teal-400/15 text-teal-300"
                               : "bg-teal-50 text-teal-800"
                             : isDarkMode
                               ? "bg-[#c96f63]/15 text-[#f0a092]"
                               : "bg-[#fff0e9] text-[#a44f46]"
-                        }`}
+                          }`}
                       >
                         <span
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            row.original.status === "active" ? "bg-emerald-500" : "bg-red-500"
-                          }`}
+                          className={`h-1.5 w-1.5 rounded-full ${row.original.status === "active" ? "bg-emerald-500" : "bg-red-500"
+                            }`}
                         />
                         <HighlightedText
                           text={getCellText(row.original, cell.column.id, cell.getValue())}

@@ -28,7 +28,6 @@ import { useTheme } from "../../theme-context";
 import ConfirmModal from "../../components/ConfirmModal";
 import Modal from "../../components/Modal";
 import ProcessBuilderWizard from "../../components/processes/ProcessBuilderWizard";
-import PaymentGatewayManagerModal from "../../components/processes/PaymentGatewayManagerModal";
 import SearchMatchText, { countSearchMatches } from "../../components/SearchMatchText";
 import {
   FORM_STORAGE_KEY,
@@ -102,7 +101,7 @@ function IconForProcess({ icon, className }: { icon: string; className?: string 
   return <Icon className={className} />;
 }
 
-function ProcessPreview({ process, gateways, forms, onClose }: { process: ProcessDefinition; gateways: PaymentGateway[]; forms: FormDefinition[]; onClose: () => void }) {
+function ProcessPreview({ process, forms, onClose }: { process: ProcessDefinition; forms: FormDefinition[]; onClose: () => void }) {
   const { isDarkMode } = useTheme();
   const surface = isDarkMode ? "border-white/10 bg-[#122925]" : "border-[#e1e6df] bg-[#f6f7f4]";
   const muted = isDarkMode ? "text-white/55" : "text-[#68766c]";
@@ -167,7 +166,7 @@ function ProcessPreview({ process, gateways, forms, onClose }: { process: Proces
         <h4 className="mb-2 text-xs font-bold">راهنمای متقاضی</h4>
         <p className={`text-xs leading-6 ${muted}`}>{process.applicantGuidance || "راهنمایی ثبت نشده است."}</p>
         <p className={`mt-3 text-[0.68rem] ${muted}`}>
-          پرداخت: {process.payment.mode === "none" ? "بدون پرداخت" : process.payment.mode === "fixed" ? `${formatPersianNumber(process.payment.amount)} ریال · ${gateways.find((gateway) => gateway.id === process.payment.provider)?.bankName ?? process.payment.provider}` : `${process.payment.formula} · ${gateways.find((gateway) => gateway.id === process.payment.provider)?.bankName ?? process.payment.provider}`}
+          پرداخت: {process.payment.mode === "none" ? "بدون پرداخت" : process.payment.mode === "fixed" ? `${formatPersianNumber(process.payment.amount)} ریال · ${process.payment.provider}` : `${process.payment.formula} · ${process.payment.provider}`}
         </p>
       </section>
     </Modal>
@@ -178,21 +177,18 @@ export default function ProcessesPage() {
   const { isDarkMode } = useTheme();
   const [processes, setProcesses] = useState<ProcessDefinition[]>(initialProcesses);
   const [forms, setForms] = useState<FormDefinition[]>(initialForms);
-  const [paymentGateways, setPaymentGateways] = useState<PaymentGateway[]>([]);
   const [query, setQuery] = useState("");
   const [activeMatch, setActiveMatch] = useState(0);
   const matchRefs = useRef<(HTMLElement | null)[]>([]);
   const [department, setDepartment] = useState("all");
   const [status, setStatus] = useState<"all" | ProcessStatus>("all");
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [gatewaysModalOpen, setGatewaysModalOpen] = useState(false);
   const [editing, setEditing] = useState<ProcessDefinition | null>(null);
   const [preview, setPreview] = useState<ProcessDefinition | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<ProcessDefinition | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [gatewayError, setGatewayError] = useState("");
 
   useEffect(() => {
     try {
@@ -210,19 +206,6 @@ export default function ProcessesPage() {
     } catch (storageError) {
       console.error("بارگذاری فرم‌های ذخیره‌شده ناموفق بود:", storageError);
     }
-    try {
-      const storedGateways = window.localStorage.getItem(PAYMENT_GATEWAYS_STORAGE_KEY);
-      if (storedGateways) {
-        const parsed: unknown = JSON.parse(storedGateways);
-        if (!isPaymentGatewayList(parsed)) {
-          throw new Error("ساختار فهرست درگاه‌های ذخیره‌شده معتبر نیست.");
-        }
-        setPaymentGateways(parsed);
-      }
-    } catch (storageError) {
-      console.error("بارگذاری درگاه‌های پرداخت ذخیره‌شده ناموفق بود:", storageError);
-      setGatewayError("درگاه‌های پرداخت ذخیره‌شده بارگذاری نشدند.");
-    }
   }, []);
 
   const persist = (next: ProcessDefinition[], successMessage?: string) => {
@@ -235,43 +218,6 @@ export default function ProcessesPage() {
       console.error("ذخیره پروسه‌ها ناموفق بود:", storageError);
       setError("تغییرات نمایش داده شدند، اما در مرورگر ذخیره نشدند.");
     }
-  };
-
-  const persistPaymentGateways = (next: PaymentGateway[]) => {
-    try {
-      savePaymentGateways(next);
-      setPaymentGateways(next);
-      setGatewayError("");
-      return true;
-    } catch (storageError) {
-      console.error("ذخیره درگاه‌های پرداخت ناموفق بود:", storageError);
-      setGatewayError("درگاه پرداخت ذخیره نشد؛ فضای ذخیره‌سازی مرورگر در دسترس نیست.");
-      return false;
-    }
-  };
-
-  const savePaymentGateway = (gateway: PaymentGateway) => {
-    const exists = paymentGateways.some((item) => item.id === gateway.id);
-    const next = exists
-      ? paymentGateways.map((item) => item.id === gateway.id ? gateway : item)
-      : [...paymentGateways, gateway];
-    return persistPaymentGateways(next);
-  };
-
-  const deletePaymentGateway = (gatewayId: string) => {
-    const gateway = paymentGateways.find((item) => item.id === gatewayId);
-    if (!gateway) return false;
-    const nextGateways = paymentGateways.filter((item) => item.id !== gatewayId);
-    if (!persistPaymentGateways(nextGateways)) return false;
-    const affectedProcesses = processes.filter((process) => process.payment.provider === gatewayId);
-    if (affectedProcesses.length) {
-      persist(
-        processes.map((process) => process.payment.provider === gatewayId
-          ? { ...process, payment: { ...process.payment, provider: "" } }
-          : process),
-      );
-    }
-    return true;
   };
 
   const filtered = useMemo(() => {
@@ -390,7 +336,7 @@ export default function ProcessesPage() {
         </div>
       </div>
       {notice && (
-        <div role="status" className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2.5 text-xs text-emerald-700 dark:text-emerald-300">
+        <div role="status" className={`mb-3 flex items-center justify-between gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2.5 text-xs ${isDarkMode ? "text-emerald-300" : "text-emerald-700"}`}>
           <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4" />{notice}</span>
           <button type="button" aria-label="بستن پیام" onClick={() => setNotice("")}><X className="h-4 w-4" /></button>
         </div>
@@ -401,9 +347,6 @@ export default function ProcessesPage() {
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => { setEditing(null); setWizardOpen(true); setNotice(""); }} className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#15554f] px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-[#246b61]">
             <Plus className="h-3.5 w-3.5" />ایجاد پروسه جدید
-          </button>
-          <button type="button" onClick={() => { setGatewaysModalOpen(true); setGatewayError(""); }} className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-medium transition-colors ${isDarkMode ? "border-white/15 bg-white/[0.05] text-white/85 hover:bg-white/10" : "border-[#d5dad4] bg-[#fafbf9] text-[#40584e] hover:bg-[#edf0eb]"}`}>
-            <Landmark className="h-3.5 w-3.5 text-[#15554f]" />ثبت درگاه
           </button>
           <label className={`flex min-w-56 flex-1 items-center gap-2 rounded-full border px-3 py-2.5 text-xs ${field}`}>
             <Search className="h-4 w-4 shrink-0 opacity-55" />
@@ -518,15 +461,7 @@ export default function ProcessesPage() {
         onClose={() => { setWizardOpen(false); setEditing(null); }}
         onSave={saveDefinition}
       />
-      {preview && <ProcessPreview process={preview} gateways={paymentGateways} forms={forms} onClose={() => setPreview(null)} />}
-      <PaymentGatewayManagerModal
-        open={gatewaysModalOpen}
-        gateways={paymentGateways}
-        operationError={gatewayError}
-        onClose={() => setGatewaysModalOpen(false)}
-        onSave={savePaymentGateway}
-        onDelete={deletePaymentGateway}
-      />
+      {preview && <ProcessPreview process={preview} forms={forms} onClose={() => setPreview(null)} />}
       <ConfirmModal
         open={Boolean(archiveTarget)}
         title="انتقال پروسه به بایگانی"

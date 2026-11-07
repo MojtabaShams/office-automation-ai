@@ -613,7 +613,7 @@ export default function ProcessBuilderWizard({
                       ? <ConditionFormulaEditor mode="formula" variables={variables} value={field.formula} onChange={(formula: FormulaValue) => updateComputedField(field.id, { formula })} />
                       : <p className={`rounded-xl border border-dashed p-3 text-xs ${t.muted}`}>برای این مرحله متغیر عددی از مراحل قبل در دسترس نیست؛ مرحله‌ی قبلی را به یک فرم عددی متصل کنید.</p>}
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-[0.68rem] text-amber-700 dark:text-amber-300">وضعیت نمونه: {stageIndex > 0 ? "در انتظار تکمیل مرحله‌ی قبل؛ با ورود به مقصد محاسبه می‌شود." : "پس از تکمیل داده‌های مبدأ محاسبه می‌شود."}</p>
+                      <p className={`text-[0.68rem] ${isDarkMode ? "text-amber-300" : "text-amber-700"}`}>وضعیت نمونه: {stageIndex > 0 ? "در انتظار تکمیل مرحله‌ی قبل؛ با ورود به مقصد محاسبه می‌شود." : "پس از تکمیل داده‌های مبدأ محاسبه می‌شود."}</p>
                       <button type="button" onClick={() => update("computedFields", (draft.computedFields ?? []).filter((item) => item.id !== field.id))} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-rose-600"><Trash2 className="h-3.5 w-3.5" />حذف</button>
                     </div>
                   </article>
@@ -633,9 +633,9 @@ export default function ProcessBuilderWizard({
                 const updateStage = (patch: Partial<ProcessStage>) => update("stages", draft.stages.map((item) => item.id === stage.id ? { ...item, ...patch } : item));
                 return (
                   <article key={stage.id} className={`space-y-3 rounded-xl border p-3 ${t.panel}`}>
-                    <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-xs font-bold">مرحله {index + 1}: {stage.title}</h4>{index < draft.stages.length - 1 && <button type="button" onClick={() => updateStage({ routeRules: [...rules, { id: `route-${crypto.randomUUID()}`, condition: emptyCondition(), nextStageId: draft.stages[index + 1]?.id ?? "" }] })} className="text-xs font-semibold text-[#4f7aab]">افزودن قانون مسیر</button>}</div>
+                    <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-xs font-bold">مرحله {index + 1}: {stage.title}</h4>{index < draft.stages.length - 1 && <button type="button" onClick={() => updateStage({ routeRules: [...rules, { id: `route-${crypto.randomUUID()}`, condition: emptyCondition(), nextStageId: draft.stages[index + 1]?.id ?? "" }] })} className="text-xs font-semibold text-[#15554f]">افزودن قانون مسیر</button>}</div>
                     {rules.map((rule: StageRouteRule) => (
-                      <div key={rule.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-950/40 lg:grid-cols-[minmax(0,1fr)_13rem_auto]">
+                      <div key={rule.id} className={`grid gap-3 rounded-xl p-3 lg:grid-cols-[minmax(0,1fr)_13rem_auto] ${isDarkMode ? "bg-black/20" : "bg-slate-50"}`}>
                         {variables.length
                           ? <ConditionFormulaEditor mode="condition" variables={variables} value={rule.condition} onChange={(condition: ConditionValue) => updateStage({ routeRules: rules.map((item) => item.id === rule.id ? { ...item, condition } : item) })} />
                           : <p className={`self-center text-xs ${t.muted}`}>فیلدی برای شرط‌گذاری در دسترس نیست.</p>}
