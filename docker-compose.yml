@@ -33,7 +33,14 @@ services:
       DATABASE_URL: postgresql://admin:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/office_automation
       SEED_ON_STARTUP: "true"
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
       GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
+      GAPGPT_API_KEY: ${GAPGPT_API_KEY:-}
+      GAPGPT_BASE_URL: ${GAPGPT_BASE_URL:-https://api.gapgpt.app/v1}
+      AGENT_ENSEMBLE_ENABLED: ${AGENT_ENSEMBLE_ENABLED:-true}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       ADMIN_MOBILE: ${ADMIN_MOBILE:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001

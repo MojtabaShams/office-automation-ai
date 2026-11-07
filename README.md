@@ -59,6 +59,16 @@ docker compose up --build
 ```
 
 The local `.env` file is ignored by Git. Do not add real credentials to the repository.
+For LLM-backed answers, add at least one provider key to this root `.env`:
+
+```dotenv
+GAPGPT_API_KEY=
+# Or use Groq when GapGPT is not configured:
+GROQ_API_KEY=
+```
+
+GapGPT is used for the multi-model ensemble when its key is set; Groq is the single-model
+fallback. Without either key, the agent intentionally uses deterministic fallback responses.
 
 ## Checks
 
