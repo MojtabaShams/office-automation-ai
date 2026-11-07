@@ -1,0 +1,66 @@
+{
+  "id": "overtime_request",
+  "title": "فرم درخواست اضافه‌کار",
+  "description": "ثبت درخواست اضافه‌کار برای یک روز مشخص همراه با تعداد ساعت و دلیل.",
+  "category": "منابع انسانی",
+  "submitLabel": "ثبت درخواست اضافه‌کار",
+  "sortOrder": 30,
+  "requirements": [
+    {
+      "title": "مدارک لازم",
+      "items": [
+        "تکمیل فرم درخواست اضافه‌کار",
+        "تأییدیه مدیر مستقیم",
+        "ثبت ساعت ورود و خروج در سامانه حضور و غیاب"
+      ]
+    },
+    {
+      "title": "مراحل",
+      "items": [
+        "ثبت درخواست پیش از انجام اضافه‌کار",
+        "تأیید مدیر مستقیم",
+        "بررسی کارگزینی و حقوق",
+        "اعمال در فیش حقوقی"
+      ]
+    }
+  ],
+  "fields": [
+    {
+      "name": "employee_name",
+      "label": "نام و نام خانوادگی",
+      "type": "text",
+      "required": true,
+      "minLength": 3,
+      "maxLength": 80
+    },
+    {
+      "name": "employee_id",
+      "label": "کد پرسنلی",
+      "type": "text",
+      "required": true,
+      "pattern": "^[0-9]{4,10}$"
+    },
+    {
+      "name": "date",
+      "label": "تاریخ",
+      "type": "date",
+      "required": true,
+      "helpText": "تاریخ انجام اضافه‌کار را وارد کنید."
+    },
+    {
+      "name": "hours",
+      "label": "تعداد ساعات",
+      "type": "number",
+      "required": true,
+      "min": 0.5,
+      "max": 12
+    },
+    {
+      "name": "reason",
+      "label": "دلیل",
+      "type": "textarea",
+      "required": true,
+      "maxLength": 500
+    }
+  ]
+}

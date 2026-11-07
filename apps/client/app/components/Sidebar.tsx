@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -16,13 +16,21 @@ import {
   Menu,
   X,
   Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 import { useTheme } from "../theme-context";
+import {
+  ADMIN_APP_URL,
+  SESSION_CHANGED_EVENT,
+  type AgentUser,
+  getStoredUser,
+  isAdminRole,
+} from "../lib/agent-api";
 
 const navItems = [
   { href: "/", icon: Home, label: "خانه" },
   { href: "/new-request", icon: PlusCircle, label: "درخواست جدید" },
-  { href: "/history", icon: History, label: "تاریخچه درخواست‌ها" },
+  { href: "/history", icon: History, label: "تاریخچه" },
 ];
 
 /* Tooltip که به سمت چپ باز می‌شود */
@@ -61,6 +69,20 @@ export default function Sidebar() {
   const { isDarkMode, themeMode, changeTheme, isFullscreen, toggleFullscreen } = useTheme();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [user, setUser] = useState<AgentUser | null>(null);
+
+  useEffect(() => {
+    const sync = () => setUser(getStoredUser());
+    sync();
+    window.addEventListener(SESSION_CHANGED_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(SESSION_CHANGED_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  const admin = isAdminRole(user);
 
   const c = isDarkMode
     ? {
@@ -195,14 +217,47 @@ export default function Sidebar() {
             </button>
           </Tip>
 
-          <Tip label="علی محمدی" isDarkMode={isDarkMode}>
-            <button
-              type="button"
-              aria-label="حساب کاربری"
-              className={`${circleBtn} bg-gradient-to-br from-[#32796d] to-[#174f49] text-white shadow-md shadow-black/20 ring-1 ring-white/20`}
+          {admin && (
+            <Tip label="پنل مدیریت" isDarkMode={isDarkMode}>
+              <a
+                href={ADMIN_APP_URL}
+                aria-label="ورود به پنل مدیریت"
+                className={`${circleBtn} ${c.circle} ${c.text}`}
+              >
+                <ShieldCheck className="h-[1.1rem] w-[1.1rem]" />
+              </a>
+            </Tip>
+          )}
+
+          <Tip label={user?.full_name || "حساب کاربری"} isDarkMode={isDarkMode}>
+            <Link
+              href="/profile"
+              aria-label="پروفایل کاربری"
+              onClick={() => setOpen(false)}
+              style={{ color: "#ffffff" }}
+              className={`${circleBtn} overflow-hidden bg-gradient-to-br from-[#32796d] to-[#174f49] text-white shadow-md shadow-black/20 ring-1 ring-white/20`}
             >
-              <User className="h-[1.1rem] w-[1.1rem]" />
-            </button>
+              {user?.avatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.avatar}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : user ? (
+                <span
+                  className="text-sm font-black"
+                  style={{ color: "#ffffff" }}
+                >
+                  {(user.full_name || "؟").trim().charAt(0)}
+                </span>
+              ) : (
+                <User
+                  className="h-[1.1rem] w-[1.1rem]"
+                  style={{ color: "#ffffff", stroke: "#ffffff" }}
+                />
+              )}
+            </Link>
           </Tip>
         </div>
       </aside>

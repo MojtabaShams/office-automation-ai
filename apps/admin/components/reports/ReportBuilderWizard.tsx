@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -28,14 +28,18 @@ import {
 } from "lucide-react";
 import ConditionFormulaEditor, { type ConditionValue } from "../ConditionFormulaEditor";
 import MetricBuilder from "./MetricBuilder";
-import { reportEntities, getReportEntity, type ReportField } from "../../app/lib/report-entities";
+import {
+  getReportEntity,
+  loadReportEntities,
+  type ReportEntity,
+  type ReportField,
+} from "../../app/lib/report-entities";
 import {
   type ReportDefinition,
   type ReportDisplayType,
   type ReportMetric,
-  loadReports,
-  saveReports,
-} from "../../app/lib/mock-reports";
+} from "../../app/lib/report-types";
+import { saveReportDefinition } from "../../app/lib/admin-api";
 import { runReport } from "./report-engine";
 import { useTheme } from "../../theme-context";
 
@@ -109,10 +113,14 @@ export default function ReportBuilderWizard({
   const { isDarkMode } = useTheme();
   const [step, setStep] = useState(0);
   const [errors, setErrors] = useState<string[]>([]);
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [entities, setEntities] = useState<ReportEntity[]>([]);
+  const [entitiesLoading, setEntitiesLoading] = useState(true);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState(CATEGORIES[0]!);
-  const [entityId, setEntityId] = useState(reportEntities[0]?.id ?? "employees");
+  const [entityId, setEntityId] = useState("");
   const [filters, setFilters] = useState<ConditionValue | undefined>();
   const [groupBy, setGroupBy] = useState<
     { fieldId: string; dateBucket?: "day" | "week" | "month" | "year" }[]
@@ -126,6 +134,31 @@ export default function ReportBuilderWizard({
 
   const entity = getReportEntity(entityId);
   const fields: ReportField[] = entity?.fields ?? [];
+
+  // Rows/fields come from the reports API (users + submissions in PostgreSQL).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const loaded = await loadReportEntities();
+        if (cancelled) return;
+        setEntities([...loaded]);
+        setEntityId((current) => current || loaded[0]?.id || "");
+        setSaveError("");
+      } catch (error) {
+        if (!cancelled) {
+          setSaveError(
+            error instanceof Error ? error.message : "دریافت منابع داده گزارش با خطا مواجه شد.",
+          );
+        }
+      } finally {
+        if (!cancelled) setEntitiesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const variables = useMemo(
     () =>
@@ -199,9 +232,14 @@ export default function ReportBuilderWizard({
     if (validateStep()) setStep((s) => Math.min(STEPS.length - 1, s + 1));
   };
 
-  const save = () => {
+  const save = async () => {
     if (!title.trim()) {
       setErrors(["عنوان گزارش را وارد کنید."]);
+      setStep(0);
+      return;
+    }
+    if (!entityId) {
+      setErrors(["منبع داده گزارش را انتخاب کنید."]);
       setStep(0);
       return;
     }
@@ -210,10 +248,17 @@ export default function ReportBuilderWizard({
       setStep(3);
       return;
     }
-    const list = loadReports();
-    saveReports([draft, ...list]);
-    onSaved();
-    onClose();
+    setSaving(true);
+    setSaveError("");
+    try {
+      await saveReportDefinition({ ...draft, id: `rpt-${Date.now()}` });
+      onSaved();
+      onClose();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "ذخیره گزارش با خطا مواجه شد.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const stepStatus = useMemo(
@@ -275,6 +320,15 @@ export default function ReportBuilderWizard({
         </div>
       )}
 
+      {saveError && (
+        <div
+          role="alert"
+          className="mt-3 shrink-0 rounded-xl border border-rose-500/25 bg-rose-500/10 p-3 text-xs text-rose-600"
+        >
+          {saveError}
+        </div>
+      )}
+
       {/* بدنه اسکرول‌شونده */}
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-0.5 py-4">
         {/* ——— مرحله ۰: اطلاعات پایه + منبع + نوع نمایش ——— */}
@@ -319,29 +373,33 @@ export default function ReportBuilderWizard({
 
             <section className={sectionClass}>
               <h3 className="mb-3 text-sm font-bold">منبع داده *</h3>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {reportEntities.map((e) => (
-                  <button
-                    key={e.id}
-                    type="button"
-                    onClick={() => setEntityId(e.id)}
-                    className={`rounded-xl border p-3 text-right transition ${
-                      entityId === e.id
-                        ? "border-[#15554f] bg-[#15554f] text-white"
-                        : `${t.panel} hover:border-[#15554f]/40`
-                    }`}
-                  >
-                    <div className="text-xs font-bold">{e.label}</div>
-                    <div
-                      className={`mt-1 text-[0.65rem] ${
-                        entityId === e.id ? "text-white/80" : t.muted
+              {entitiesLoading ? (
+                <p className={`text-[0.7rem] ${t.muted}`}>در حال دریافت منابع داده از پایگاه داده…</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {entities.map((e) => (
+                    <button
+                      key={e.id}
+                      type="button"
+                      onClick={() => setEntityId(e.id)}
+                      className={`rounded-xl border p-3 text-right transition ${
+                        entityId === e.id
+                          ? "border-[#15554f] bg-[#15554f] text-white"
+                          : `${t.panel} hover:border-[#15554f]/40`
                       }`}
                     >
-                      {e.fields.length} فیلد قابل گزارش‌گیری
-                    </div>
-                  </button>
-                ))}
-              </div>
+                      <div className="text-xs font-bold">{e.label}</div>
+                      <div
+                        className={`mt-1 text-[0.65rem] ${
+                          entityId === e.id ? "text-white/80" : t.muted
+                        }`}
+                      >
+                        {e.fields.length} فیلد قابل گزارش‌گیری
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </section>
 
             <section className={sectionClass}>
@@ -673,11 +731,12 @@ export default function ReportBuilderWizard({
             ) : (
               <button
                 type="button"
-                onClick={save}
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                onClick={() => void save()}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
               >
                 <Check className="h-4 w-4" />
-                ذخیره گزارش
+                {saving ? "در حال ذخیره…" : "ذخیره گزارش"}
               </button>
             )}
           </div>

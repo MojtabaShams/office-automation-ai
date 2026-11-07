@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
   CalendarDays,
@@ -11,6 +11,7 @@ import {
   FileText,
   FolderUp,
   Landmark,
+  Loader2,
   MoreVertical,
   Pencil,
   Plus,
@@ -27,20 +28,15 @@ import Modal from "../../components/Modal";
 import FormEditorModal from "../../components/forms/FormEditorModal";
 import PaymentGatewayManagerModal from "../../components/processes/PaymentGatewayManagerModal";
 import SearchMatchText, { countSearchMatches } from "../../components/SearchMatchText";
-import {
-  FORM_STORAGE_KEY,
-  ensureFormVersions,
-  initialForms,
-  saveForms,
-  type FormDefinition,
-  type FormType,
-} from "../lib/mock-forms";
+import type { FormDefinition, FormType } from "../lib/mock-forms";
 import type { ProcessStatus } from "../lib/mock-processes";
 import {
-  PAYMENT_GATEWAYS_STORAGE_KEY,
-  savePaymentGateways,
-  type PaymentGateway,
-} from "../lib/payment-gateways";
+  archiveAdminForm,
+  listAdminForms,
+  saveAdminForm,
+  setAdminFormStatus,
+} from "../lib/admin-api";
+import { usePaymentGateways, type PaymentGateway } from "../lib/payment-gateways";
 import { UNIT_LABELS } from "../lib/units";
 
 const STATUS_FILTERS: { value: "all" | ProcessStatus; label: string }[] = [
@@ -71,23 +67,6 @@ const STATUS_LABEL: Record<ProcessStatus, string> = {
   draft: "پیش‌نویس",
   archived: "بایگانی‌شده",
 };
-
-function isPaymentGatewayList(value: unknown): value is PaymentGateway[] {
-  return Array.isArray(value) && value.every((gateway: unknown) =>
-    typeof gateway === "object"
-    && gateway !== null
-    && "id" in gateway
-    && typeof gateway.id === "string"
-    && "bankName" in gateway
-    && typeof gateway.bankName === "string"
-    && "connectionKey" in gateway
-    && typeof gateway.connectionKey === "string"
-    && "description" in gateway
-    && typeof gateway.description === "string"
-    && "updatedAt" in gateway
-    && typeof gateway.updatedAt === "string"
-  );
-}
 
 function IconForForm({ formType, className }: { formType: FormType; className?: string }) {
   const Icon = formType === "payment" ? Wallet : formType === "document" ? FolderUp : FileText;
@@ -191,8 +170,15 @@ function FormPreview({ form, gateways, onClose }: { form: FormDefinition; gatewa
 
 export default function FormsPage() {
   const { isDarkMode } = useTheme();
-  const [forms, setForms] = useState<FormDefinition[]>(initialForms);
-  const [paymentGateways, setPaymentGateways] = useState<PaymentGateway[]>([]);
+  const [forms, setForms] = useState<FormDefinition[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const {
+    gateways: paymentGateways,
+    loading: gatewaysLoading,
+    error: gatewayError,
+    reload: reloadGateways,
+  } = usePaymentGateways();
   const [query, setQuery] = useState("");
   const [activeMatch, setActiveMatch] = useState(0);
   const matchRefs = useRef<(HTMLElement | null)[]>([]);
@@ -206,71 +192,81 @@ export default function FormsPage() {
   const [archiveTarget, setArchiveTarget] = useState<FormDefinition | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [gatewayError, setGatewayError] = useState("");
 
-  useEffect(() => {
+  /** Every list/mutation goes through PostgreSQL; the server stays the source of truth. */
+  const reload = useCallback(async () => {
     try {
-      const stored = window.localStorage.getItem(FORM_STORAGE_KEY);
-      if (stored) setForms(ensureFormVersions(JSON.parse(stored) as FormDefinition[]));
-    } catch (storageError) {
-      console.error("بارگذاری فرم‌های ذخیره‌شده ناموفق بود:", storageError);
-      setError("فرم‌های ذخیره‌شده بارگذاری نشدند؛ داده‌های نمونه نمایش داده می‌شوند.");
-    }
-    try {
-      const storedGateways = window.localStorage.getItem(PAYMENT_GATEWAYS_STORAGE_KEY);
-      if (storedGateways) {
-        const parsed: unknown = JSON.parse(storedGateways);
-        if (!isPaymentGatewayList(parsed)) throw new Error("ساختار فهرست درگاه‌های ذخیره‌شده معتبر نیست.");
-        setPaymentGateways(parsed);
-      }
-    } catch (storageError) {
-      console.error("بارگذاری درگاه‌های پرداخت ذخیره‌شده ناموفق بود:", storageError);
-      setGatewayError("درگاه‌های پرداخت ذخیره‌شده بارگذاری نشدند.");
+      const next = await listAdminForms();
+      setForms(next);
+      setError("");
+    } catch (loadError) {
+      console.error("بارگذاری فرم‌ها از سرور ناموفق بود:", loadError);
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "بارگذاری فرم‌ها از سرور ناموفق بود.",
+      );
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  const persist = (next: FormDefinition[], successMessage?: string) => {
-    setForms(next);
-    try {
-      saveForms(next);
-      setError("");
-      if (successMessage) setNotice(successMessage);
-    } catch (storageError) {
-      console.error("ذخیره فرم‌ها ناموفق بود:", storageError);
-      setError("تغییرات نمایش داده شدند، اما در مرورگر ذخیره نشدند.");
-    }
-  };
+  useEffect(() => {
+    void reload();
+  }, [reload]);
 
-  const persistPaymentGateways = (next: PaymentGateway[]) => {
-    try {
-      savePaymentGateways(next);
-      setPaymentGateways(next);
-      setGatewayError("");
-      return true;
-    } catch (storageError) {
-      console.error("ذخیره درگاه‌های پرداخت ناموفق بود:", storageError);
-      setGatewayError("درگاه پرداخت ذخیره نشد؛ فضای ذخیره‌سازی مرورگر در دسترس نیست.");
+  const saveDefinition = async (definition: FormDefinition) => {
+    const duplicateCode = forms.some(
+      (item) => item.code.toLocaleLowerCase() === definition.code.toLocaleLowerCase() && item.id !== editing?.id && item.status !== "archived"
+    );
+    if (duplicateCode) {
+      setError(`کد «${definition.code}» قبلاً برای فرم دیگری ثبت شده است.`);
       return false;
     }
+    setSaving(true);
+    try {
+      const saved = await saveAdminForm(definition);
+      await reload();
+      setEditing(null);
+      setEditorOpen(false);
+      setNotice(`فرم «${saved.title}» ذخیره شد.`);
+      return true;
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const savePaymentGateway = (gateway: PaymentGateway) => {
-    const exists = paymentGateways.some((item) => item.id === gateway.id);
-    const next = exists ? paymentGateways.map((item) => (item.id === gateway.id ? gateway : item)) : [...paymentGateways, gateway];
-    return persistPaymentGateways(next);
+  const toggleStatus = async (form: FormDefinition) => {
+    if (form.status === "draft" || form.status === "archived") return;
+    const nextStatus: ProcessStatus = form.status === "active" ? "inactive" : "active";
+    setOpenMenu(null);
+    try {
+      await setAdminFormStatus(form.id, nextStatus);
+      setNotice(`فرم «${form.title}» ${nextStatus === "active" ? "فعال" : "غیرفعال"} شد.`);
+      await reload();
+    } catch (statusError) {
+      setError(
+        statusError instanceof Error
+          ? statusError.message
+          : "تغییر وضعیت فرم ناموفق بود.",
+      );
+    }
   };
 
-  const deletePaymentGateway = (gatewayId: string) => {
-    const gateway = paymentGateways.find((item) => item.id === gatewayId);
-    if (!gateway) return false;
-    const nextGateways = paymentGateways.filter((item) => item.id !== gatewayId);
-    if (!persistPaymentGateways(nextGateways)) return false;
-    persist(
-      forms.map((form) =>
-        form.payment?.gatewayId === gatewayId ? { ...form, payment: { ...form.payment, gatewayId: "" } } : form
-      )
-    );
-    return true;
+  const archive = async () => {
+    if (!archiveTarget) return;
+    try {
+      await archiveAdminForm(archiveTarget.id);
+      setNotice(`فرم «${archiveTarget.title}» به بایگانی منتقل شد.`);
+      setArchiveTarget(null);
+      await reload();
+    } catch (archiveError) {
+      setError(
+        archiveError instanceof Error
+          ? archiveError.message
+          : "انتقال فرم به بایگانی ناموفق بود.",
+      );
+    }
   };
 
   const departmentOptions = useMemo(
@@ -338,42 +334,6 @@ export default function FormsPage() {
     [forms]
   );
 
-  const saveDefinition = (definition: FormDefinition) => {
-    const duplicateCode = forms.some(
-      (item) => item.code.toLocaleLowerCase() === definition.code.toLocaleLowerCase() && item.id !== editing?.id && item.status !== "archived"
-    );
-    if (duplicateCode) {
-      setError(`کد «${definition.code}» قبلاً برای فرم دیگری ثبت شده است.`);
-      return false;
-    }
-    const exists = forms.some((item) => item.id === editing?.id);
-    const next = exists
-      ? forms.map((item) => (item.id === editing!.id ? { ...definition, id: editing!.id } : item))
-      : [...forms, definition];
-    persist(next, exists ? "فرم ویرایش شد." : "فرم جدید ثبت شد.");
-    setEditing(null);
-    setEditorOpen(false);
-    return true;
-  };
-
-  const toggleStatus = (form: FormDefinition) => {
-    if (form.status === "draft" || form.status === "archived") return;
-    const nextStatus = form.status === "active" ? "inactive" : "active";
-    persist(
-      forms.map((item) => (item.id === form.id ? { ...item, status: nextStatus, updatedAt: new Date().toISOString() } : item)),
-      `فرم «${form.title}» ${nextStatus === "active" ? "فعال" : "غیرفعال"} شد.`
-    );
-    setOpenMenu(null);
-  };
-
-  const archive = () => {
-    if (!archiveTarget) return;
-    persist(
-      forms.map((item) => (item.id === archiveTarget.id ? { ...item, status: "archived", updatedAt: new Date().toISOString() } : item)),
-      `فرم «${archiveTarget.title}» به بایگانی منتقل شد.`
-    );
-    setArchiveTarget(null);
-  };
 
   const surface = isDarkMode ? "border-white/10 bg-[#193632]" : "border-[#e1e6df] bg-[#f6f7f4]";
   const field = isDarkMode
@@ -404,13 +364,14 @@ export default function FormsPage() {
           <button
             type="button"
             onClick={() => { setEditing(null); setEditorOpen(true); setNotice(""); }}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#15554f] px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-[#246b61]"
+            disabled={saving || loading}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#15554f] px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-[#246b61] disabled:opacity-60"
           >
             <Plus className="h-3.5 w-3.5" />ثبت فرم جدید
           </button>
           <button
             type="button"
-            onClick={() => { setGatewaysModalOpen(true); setGatewayError(""); }}
+            onClick={() => setGatewaysModalOpen(true)}
             className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-medium transition-colors ${
               isDarkMode ? "border-white/15 bg-white/[0.05] text-white/85 hover:bg-white/10" : "border-[#e1e6df] bg-[#fafbf9] text-[#40584e] hover:bg-[#f6f7f4]"
             }`}
@@ -504,7 +465,7 @@ export default function FormsPage() {
                     <div className={`absolute left-0 top-full z-20 mt-1 w-48 rounded-xl border p-1.5 shadow-xl ${isDarkMode ? "border-white/10 bg-[#122925]" : "border-[#e1e6df] bg-white"}`}>
                       <button type="button" onClick={() => { setEditing(form); setEditorOpen(true); setOpenMenu(null); setNotice(""); }} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-right text-xs hover:bg-[#15554f]/10"><Pencil className="h-3.5 w-3.5" />ویرایش / ایجاد نسخه</button>
                       <button type="button" onClick={() => { setPreview(form); setOpenMenu(null); }} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-right text-xs hover:bg-[#15554f]/10"><ClipboardList className="h-3.5 w-3.5" />پیش‌نمایش جزئیات</button>
-                      <button type="button" disabled={form.status === "draft"} onClick={() => toggleStatus(form)} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-right text-xs hover:bg-[#15554f]/10 disabled:cursor-not-allowed disabled:opacity-40">
+                      <button type="button" disabled={form.status === "draft"} onClick={() => void toggleStatus(form)} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-right text-xs hover:bg-[#15554f]/10 disabled:cursor-not-allowed disabled:opacity-40">
                         {form.status === "active" ? <ToggleRight className="h-3.5 w-3.5" /> : <ToggleLeft className="h-3.5 w-3.5" />}
                         {form.status === "active" ? "غیرفعال‌کردن سریع" : form.status === "draft" ? "ابتدا فرم را منتشر کنید" : "فعال‌کردن"}
                       </button>
@@ -534,9 +495,18 @@ export default function FormsPage() {
         </div>
       ) : (
         <div className={`rounded-2xl border border-dashed p-10 text-center ${muted} ${isDarkMode ? "border-white/15" : "border-[#cfd6ce]"}`}>
-          <Search className="mx-auto mb-3 h-8 w-8 opacity-40" />
-          <p className="text-sm font-semibold">فرمی با این فیلترها پیدا نشد</p>
-          <button type="button" onClick={() => { setQuery(""); setDepartment("all"); setStatus("all"); }} className="mt-3 text-xs font-semibold text-[#15554f] hover:underline">پاک کردن فیلترها</button>
+          {loading ? (
+            <>
+              <Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin opacity-40" />
+              <p className="text-sm font-semibold">در حال بارگذاری فرم‌ها از پایگاه داده…</p>
+            </>
+          ) : (
+            <>
+              <Search className="mx-auto mb-3 h-8 w-8 opacity-40" />
+              <p className="text-sm font-semibold">فرمی با این فیلترها پیدا نشد</p>
+              <button type="button" onClick={() => { setQuery(""); setDepartment("all"); setStatus("all"); }} className="mt-3 text-xs font-semibold text-[#15554f] hover:underline">پاک کردن فیلترها</button>
+            </>
+          )}
         </div>
       )}
 
@@ -551,10 +521,10 @@ export default function FormsPage() {
       <PaymentGatewayManagerModal
         open={gatewaysModalOpen}
         gateways={paymentGateways}
-        operationError={gatewayError}
+        loading={gatewaysLoading}
+        error={gatewayError}
+        onReload={reloadGateways}
         onClose={() => setGatewaysModalOpen(false)}
-        onSave={savePaymentGateway}
-        onDelete={deletePaymentGateway}
       />
       <ConfirmModal
         open={Boolean(archiveTarget)}
@@ -562,7 +532,7 @@ export default function FormsPage() {
         message={archiveTarget ? `«${archiveTarget.title}» از فهرست فعال خارج و به بایگانی منتقل می‌شود. پروسه‌هایی که نسخه‌ی فعلی این فرم را قفل کرده‌اند، تحت‌تأثیر قرار نمی‌گیرند. ادامه می‌دهید؟` : ""}
         confirmLabel="انتقال به بایگانی"
         danger
-        onConfirm={archive}
+        onConfirm={() => void archive()}
         onClose={() => setArchiveTarget(null)}
       />
     </div>

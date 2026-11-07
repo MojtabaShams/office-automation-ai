@@ -1,4 +1,5 @@
-import type { ProcessField, ProcessStatus } from "./mock-processes";
+import type { FormulaValue } from "../../components/ConditionFormulaEditor";
+import type { PaymentAmountSource, ProcessField, ProcessStatus } from "./mock-processes";
 
 export type FormType = "standard" | "document" | "payment";
 
@@ -6,7 +7,14 @@ export type ValidationRule = {
   id: string;
   text: string;
   source?: { fileName: string; pageOrClause?: string };
+  relatedFieldIds?: string[];
 };
+
+/**
+ * قانون ساخت‌یافته. `id` و `source` در ویرایش حفظ می‌شوند تا ردیابی سند گم نشود.
+ * قوانین متنی فقط راهنمای عامل هوشمند هستند؛ قیود مکانیکی در `field.validation` است.
+ */
+export type StructuredRule = ValidationRule;
 
 export type FormVersionSnapshot = {
   version: string;
@@ -14,7 +22,46 @@ export type FormVersionSnapshot = {
   formType: FormType;
   fields: ProcessField[];
   rules: ValidationRule[];
-  payment?: { gatewayId: string; defaultAmount?: number };
+  payment?: FormPaymentProjection;
+  lockedAt?: string;
+};
+
+/* ------------------------------------------------------- اسناد مرجع فرم (H5) */
+
+export type DocumentExtractionStatus =
+  | "pending"
+  | "processing"
+  | "done"
+  | "failed"
+  | "unsupported";
+
+export type ReferenceDocument = {
+  id: string;
+  formId: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  storageKey: string;
+  uploadedAt: string;
+  uploadedBy?: string;
+  extractionStatus: DocumentExtractionStatus;
+  extractedText?: string;
+  pageCount?: number;
+};
+
+/**
+ * Projection of the first payment field, kept in sync by the form editor so every
+ * existing consumer (forms list, process preview, request processing) keeps showing a
+ * configured gateway instead of "gateway not selected".
+ */
+export type FormPaymentProjection = {
+  gatewayId: string;
+  defaultAmount?: number;
+  amountSource?: PaymentAmountSource;
+  amountFormula?: FormulaValue;
+  processVariableId?: string;
+  /** id of the payment field this projection mirrors */
+  fieldId?: string;
 };
 
 export type FormDefinition = {
@@ -31,20 +78,19 @@ export type FormDefinition = {
   fields: ProcessField[];
   rules: ValidationRule[];
   applicantGuidance: string;
-  payment?: { gatewayId: string; defaultAmount?: number };
+  payment?: FormPaymentProjection;
   sourceFileName?: string;
   directiveFileNames: string[];
+  referenceDocuments?: ReferenceDocument[];
   versions: FormVersionSnapshot[];
 };
-
-export const FORM_STORAGE_KEY = "office-admin-form-definitions-v1";
 
 const makeVersion = (
   version: string,
   formType: FormType,
   fields: ProcessField[],
   rules: ValidationRule[],
-  payment?: FormDefinition["payment"],
+  payment?: FormPaymentProjection,
 ): FormVersionSnapshot => ({
   version,
   publishedAt: "2026-10-01T09:00:00.000Z",
@@ -171,10 +217,6 @@ export const initialForms: FormDefinition[] = initialFormEntries.map((form) => (
   versions: [makeVersion(form.version, form.formType, form.fields, form.rules, form.payment)],
 }));
 
-export function saveForms(forms: FormDefinition[]) {
-  window.localStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(forms));
-}
-
 export function ensureFormVersions(forms: FormDefinition[]) {
   return forms.map((form) => {
     const formType = form.formType ?? "standard";
@@ -195,11 +237,13 @@ export function ensureFormVersions(forms: FormDefinition[]) {
         ? { id: `${form.id}-legacy-rule-${index}`, text: rule }
         : rule)
       : [];
+    const normalizedFields = hierarchicalFields.map(normalizeFormField);
     return {
       ...form,
       formType,
-      fields: hierarchicalFields,
+      fields: normalizedFields,
       rules,
+      payment: derivePaymentProjection(normalizedFields, form.payment),
       versions: form.versions?.length
         ? form.versions
         : form.status === "active"
@@ -207,4 +251,125 @@ export function ensureFormVersions(forms: FormDefinition[]) {
           : [],
     };
   });
+}
+
+/* ------------------------------------------------------------------ migration */
+
+/**
+ * نگاشت تحمل‌پذیر فیلد.
+ * نسخه‌ی قدیمی تنظیمات پرداخت را مستقیم روی فیلد (`gatewayId`, `defaultAmount`,
+ * `amountFormula`) ذخیره می‌کرد؛ اینجا به `field.payment` منتقل می‌شود.
+ */
+export function normalizeFormField(field: ProcessField): ProcessField {
+  const legacy = field as ProcessField & {
+    gatewayId?: string;
+    defaultAmount?: number;
+    amountFormula?: FormulaValue;
+  };
+  const base: ProcessField = { ...field };
+  const loose = base as unknown as Record<string, unknown>;
+  delete loose.gatewayId;
+  delete loose.defaultAmount;
+  delete loose.amountFormula;
+  if (base.subFields) base.subFields = base.subFields.map(normalizeFormField);
+  if (base.type === "payment") {
+    const payment = base.payment ?? {};
+    const legacyFormula = legacy.amountFormula;
+    const hasLegacyFormula = Array.isArray(legacyFormula?.tokens) && legacyFormula.tokens.length > 0;
+    base.payment = {
+      gatewayId: payment.gatewayId ?? legacy.gatewayId ?? "",
+      amountSource:
+        payment.amountSource ??
+        (legacy.defaultAmount != null ? "fixed" : hasLegacyFormula ? "form_formula" : "fixed"),
+      ...(payment.defaultAmount ?? legacy.defaultAmount) != null
+        ? { defaultAmount: payment.defaultAmount ?? legacy.defaultAmount }
+        : {},
+      ...(payment.amountFormula ?? (hasLegacyFormula ? legacyFormula : undefined))
+        ? { amountFormula: payment.amountFormula ?? legacyFormula }
+        : {},
+      ...(payment.processVariableId ? { processVariableId: payment.processVariableId } : {}),
+    };
+  }
+  return base;
+}
+
+/**
+ * اولین فیلد پرداخت واقعی فرم (در بخش‌های تودرتو، نه ستون‌های جدول تکراری).
+ */
+function findPaymentField(fields: ProcessField[]): ProcessField | undefined {
+  for (const field of fields) {
+    if (field.type === "payment") return field;
+    if (field.type === "section" && Array.isArray(field.subFields)) {
+      const nested = findPaymentField(field.subFields);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * یکسان‌سازی `form.payment` با فیلد پرداخت (M4).
+ * اگر فیلدی وجود داشته باشد، منبع حقیقت همان فیلد است؛ در غیر این صورت برآمد قبلی
+ * دست‌نخورده می‌ماند تا فرم‌های قدیمی داده‌ی خود را از دست ندهند.
+ */
+export function derivePaymentProjection(
+  fields: ProcessField[],
+  current?: FormPaymentProjection,
+): FormPaymentProjection | undefined {
+  const paymentField = findPaymentField(fields);
+  if (!paymentField) return current;
+  const config = paymentField.payment ?? {};
+  const hasFormula = Array.isArray(config.amountFormula?.tokens) && config.amountFormula.tokens.length > 0;
+  const amountSource: PaymentAmountSource =
+    config.amountSource ??
+    current?.amountSource ??
+    (config.processVariableId ? "process_variable" : hasFormula ? "form_formula" : "fixed");
+  return {
+    gatewayId: config.gatewayId ?? current?.gatewayId ?? "",
+    amountSource,
+    fieldId: paymentField.id,
+    ...(config.defaultAmount != null
+      ? { defaultAmount: config.defaultAmount }
+      : current?.defaultAmount != null
+        ? { defaultAmount: current.defaultAmount }
+        : {}),
+    ...(hasFormula && config.amountFormula ? { amountFormula: config.amountFormula } : {}),
+    ...(config.processVariableId ? { processVariableId: config.processVariableId } : {}),
+  };
+}
+
+/** خواننده‌ی تحمل‌پذیر فرم‌های ذخیره‌شده (شامل فیلدهای پرداخت پهن). */
+export function normalizeForm(raw: Partial<FormDefinition>): FormDefinition {
+  const fields = (Array.isArray(raw.fields) ? raw.fields : []).map((field) =>
+    normalizeFormField(field),
+  );
+  const rules: ValidationRule[] = Array.isArray(raw.rules)
+    ? raw.rules.map((rule, index) =>
+        typeof rule === "string"
+          ? { id: `${raw.id ?? "form"}-legacy-rule-${index}`, text: rule }
+          : rule,
+      )
+    : [];
+  const payment = derivePaymentProjection(fields, raw.payment);
+  const hasPaymentProjection = !!payment && (!!payment.gatewayId || payment.defaultAmount != null);
+  return {
+    id: raw.id ?? `form-${Date.now()}`,
+    code: raw.code ?? "",
+    title: raw.title ?? "",
+    department: raw.department ?? "عمومی",
+    description: raw.description ?? "",
+    icon: raw.icon ?? "file",
+    status: raw.status === "active" || raw.status === "inactive" || raw.status === "archived" ? raw.status : "draft",
+    version: raw.version ?? "0.1",
+    updatedAt: raw.updatedAt ?? new Date().toISOString(),
+    formType: raw.formType ?? "standard",
+    fields,
+    rules,
+    applicantGuidance: raw.applicantGuidance ?? "",
+    ...(hasPaymentProjection && payment ? { payment } : {}),
+    ...(raw.sourceFileName ? { sourceFileName: raw.sourceFileName } : {}),
+    directiveFileNames: Array.isArray(raw.directiveFileNames) ? raw.directiveFileNames : [],
+    referenceDocuments: Array.isArray(raw.referenceDocuments) ? raw.referenceDocuments : [],
+    versions: Array.isArray(raw.versions) ? raw.versions : [],
+  };
 }

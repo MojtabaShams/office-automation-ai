@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Vazirmatn } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "../theme-context";
+import { AuthProvider } from "./auth-context";
 import AdminShell from "../components/AdminShell";
 
 const vazir = Vazirmatn({
@@ -23,7 +24,9 @@ export default function RootLayout({
     <html lang="fa" dir="rtl">
       <body className={vazir.className}>
         <ThemeProvider>
-          <AdminShell>{children}</AdminShell>
+          <AuthProvider>
+            <AdminShell>{children}</AdminShell>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

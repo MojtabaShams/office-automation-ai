@@ -1,7 +1,5 @@
-version: '3.8'
-
 services:
-  # ۱. پایگاه داده PostgreSQL با افزونه هوش مصنوعی pgvector
+  # ۱. پایگاه داده PostgreSQL با افزونه برداری pgvector (برای RAG)
   db:
     image: pgvector/pgvector:pg16
     container_name: office_db
@@ -14,8 +12,13 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d office_automation"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
-  # ۲. سرویس هوش مصنوعی (پایتون)
+  # ۲. سرویس Agent (FastAPI + LangGraph)
   ai_agent:
     build:
       context: ./ai-agent
@@ -25,11 +28,18 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./ai-agent:/app  # اتصال کدهای سیستم شما به داخل داکر برای اعمال در لحظه تغییرات
+      - ./ai-agent:/app  # اتصال کدها به داخل داکر برای اعمال در لحظه تغییرات
     environment:
       DATABASE_URL: postgresql://admin:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/office_automation
+      SEED_ON_STARTUP: "true"
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
+      ADMIN_MOBILE: ${ADMIN_MOBILE:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   # ۳. فرانت‌اند سازمانی و مردمی (Turborepo)
   frontend:
@@ -45,7 +55,7 @@ services:
       - ./:/app
       - /app/node_modules # جلوگیری از تداخل node_modules ویندوز و لینوکس
     environment:
-      - NEXT_PUBLIC_AI_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_AGENT_API_URL=http://localhost:8000
     depends_on:
       - ai_agent
 

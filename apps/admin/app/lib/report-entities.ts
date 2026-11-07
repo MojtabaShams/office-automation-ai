@@ -1,18 +1,19 @@
-import { initialEmployees } from "./mock-employees";
-import {
-  initialRequests,
-  type AdminRequest,
-  REQUEST_STORAGE_KEY,
-} from "./mock-requests";
+/**
+ * Report data sources.
+ *
+ * Rows and field metadata come from ``GET /api/admin/reports/entities``, which the
+ * backend aggregates straight from PostgreSQL (users + submissions). The list is
+ * cached in memory so the synchronous report engine (``runReport``) keeps working
+ * unchanged after the first load.
+ */
 
-export type ReportField = {
-  id: string;
-  label: string;
-  type: "text" | "number" | "date" | "select" | "boolean";
-  unit?: string;
-  unitCategory?: string;
-  options?: string[];
-};
+import {
+  getReportEntities as fetchReportEntities,
+  type ReportEntityData,
+  type ReportEntityField,
+} from "./admin-api";
+
+export type ReportField = ReportEntityField;
 
 export type ReportEntity = {
   id: string;
@@ -21,89 +22,45 @@ export type ReportEntity = {
   fields: ReportField[];
 };
 
-function loadRequests(): AdminRequest[] {
-  if (typeof window === "undefined") return initialRequests;
-  try {
-    const raw = window.localStorage.getItem(REQUEST_STORAGE_KEY);
-    if (!raw) return initialRequests;
-    return JSON.parse(raw) as AdminRequest[];
-  } catch {
-    return initialRequests;
-  }
+/** Mutable registry — importers keep a stable reference while rows are refetched. */
+const registry: ReportEntity[] = [];
+
+let loaded = false;
+let inflight: Promise<ReportEntity[]> | null = null;
+
+function toEntity(data: ReportEntityData): ReportEntity {
+  return {
+    id: data.id,
+    label: data.label,
+    fields: data.fields,
+    getRows: () => data.rows,
+  };
 }
 
-const groupLabel: Record<string, string> = {
-  active: "در حال رسیدگی",
-  completed: "تکمیل‌شده",
-  expired: "بسته‌شده",
-};
+/** The loaded entities (empty until :func:`loadReportEntities` resolves). */
+export const reportEntities: ReportEntity[] = registry;
 
-export const reportEntities: ReportEntity[] = [
-  {
-    id: "employees",
-    label: "کارمندان",
-    fields: [
-      { id: "fullName", label: "نام و نام خانوادگی", type: "text" },
-      { id: "role", label: "نقش شغلی", type: "text" },
-      { id: "status", label: "وضعیت", type: "select", options: ["active", "inactive"] },
-      { id: "hireDate", label: "تاریخ استخدام", type: "date" },
-      { id: "accessLevelId", label: "سطح دسترسی", type: "text" },
-      { id: "email", label: "ایمیل", type: "text" },
-      { id: "phone", label: "شماره تماس", type: "text" },
-    ],
-    getRows: () =>
-      initialEmployees.map((e) => ({
-        id: e.id,
-        fullName: e.fullName,
-        role: e.role,
-        status: e.status,
-        hireDate: e.hireDate,
-        accessLevelId: e.accessLevelId,
-        email: e.email,
-        phone: e.phone,
-      })),
-  },
-  {
-    id: "requests",
-    label: "درخواست‌ها / پرونده‌ها",
-    fields: [
-      { id: "processName", label: "نوع پروسه", type: "text" },
-      {
-        id: "group",
-        label: "وضعیت کلی",
-        type: "select",
-        options: ["active", "completed", "expired"],
-      },
-      { id: "subStatus", label: "زیروضعیت", type: "text" },
-      { id: "createdAt", label: "تاریخ ثبت", type: "date" },
-      { id: "updatedAt", label: "آخرین تغییر", type: "date" },
-      { id: "assigneeName", label: "مسئول فعلی", type: "text" },
-      { id: "escalated", label: "اسکالیشن", type: "boolean" },
-      { id: "title", label: "عنوان", type: "text" },
-      { id: "applicantName", label: "متقاضی", type: "text" },
-    ],
-    getRows: () => {
-      const list = loadRequests();
-      return list.map((r) => {
-        const current = r.stages?.[r.currentStageIndex];
-        return {
-          id: r.id,
-          processName: r.processName,
-          group: r.group,
-          groupLabel: groupLabel[r.group] ?? r.group,
-          subStatus: r.subStatus,
-          createdAt: new Date(r.createdAt),
-          updatedAt: new Date(r.updatedAt),
-          assigneeName: current?.assigneeId ?? "—",
-          escalated: r.subStatus === "escalation",
-          title: r.title,
-          applicantName: r.applicantName,
-        };
-      });
-    },
-  },
-];
+/**
+ * Load (or reload) the entity rows from the database.
+ *
+ * Concurrent callers share one request; ``force`` bypasses the cache so a page can
+ * pull fresh numbers after new submissions arrive.
+ */
+export async function loadReportEntities(force = false): Promise<ReportEntity[]> {
+  if (loaded && !force) return registry;
+  if (inflight && !force) return inflight;
+  inflight = fetchReportEntities()
+    .then((items) => {
+      registry.splice(0, registry.length, ...items.map(toEntity));
+      loaded = true;
+      return registry;
+    })
+    .finally(() => {
+      inflight = null;
+    });
+  return inflight;
+}
 
 export function getReportEntity(id: string): ReportEntity | undefined {
-  return reportEntities.find((e) => e.id === id);
+  return registry.find((entity) => entity.id === id);
 }

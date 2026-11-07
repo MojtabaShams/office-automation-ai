@@ -13,6 +13,8 @@ import {
   LogIn,
 } from "lucide-react";
 import { useTheme } from "../theme-context";
+import { useAuth } from "../app/auth-context";
+import { formatJalali } from "../app/lib/jalali";
 import AnalogClock from "./AnalogClock";
 
 /* ---------- داده‌های نمایشی (موقت) ---------- */
@@ -40,6 +42,18 @@ const todayMessages = [
 
 export default function AdminHome() {
   const { isDarkMode } = useTheme();
+  const { user } = useAuth();
+
+  const lastLogin = user?.last_login_at ? new Date(user.last_login_at) : null;
+  const lastLoginLabel =
+    lastLogin && !Number.isNaN(lastLogin.getTime())
+      ? `${formatJalali(lastLogin)} · ${new Intl.DateTimeFormat("fa-IR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(lastLogin)}`
+      : "—";
+  const roleLabel = user?.role_name || user?.role || "—";
+  const unitLabel = user?.unit?.trim() || "بدون واحد سازمانی";
 
   const t = isDarkMode
     ? {
@@ -173,19 +187,29 @@ export default function AdminHome() {
           <div className="flex items-center gap-4">
             {/* آواتار گرد با حلقه وضعیت */}
             <div className="relative shrink-0">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[#276e63] to-[#174b46] text-white shadow-lg ring-2 ring-white/20">
-                <User className="h-7 w-7" />
+              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#276e63] to-[#174b46] text-white shadow-lg ring-2 ring-white/20">
+                {user?.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt={user.full_name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <User className="h-7 w-7" />
+                )}
               </div>
             </div>
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <h3 className="truncate text-lg font-black">علی محمدی</h3>
+                <h3 className="truncate text-lg font-black">{user?.full_name ?? "کاربر"}</h3>
                 <span className={`rounded-full px-2 py-0.5 text-[0.65rem] font-medium ${t.badge}`}>
                   آنلاین
                 </span>
               </div>
-              <p className={`mt-0.5 text-sm ${t.sub}`}>مدیر سیستم · Super Admin</p>
+              <p className={`mt-0.5 truncate text-sm ${t.sub}`}>
+                {roleLabel} · {unitLabel}
+              </p>
             </div>
           </div>
 
@@ -197,22 +221,22 @@ export default function AdminHome() {
             <div className={`rounded-xl p-3 ${t.softBg}`}>
               <div className={`mb-1 text-[0.65rem] ${t.sub}`}>آخرین ورود</div>
               <div className="flex items-center gap-1.5 text-sm font-bold">
-                <LogIn className="h-3.5 w-3.5 opacity-70" />
-                امروز · ۰۸:۴۲
+                <LogIn className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                <span className="truncate">{lastLoginLabel}</span>
               </div>
             </div>
 
             <div className={`rounded-xl p-3 ${t.softBg}`}>
               <div className={`mb-1 text-[0.65rem] ${t.sub}`}>نقش کاربری</div>
               <div className="flex items-center gap-1.5 text-sm font-bold">
-                <Shield className="h-3.5 w-3.5 opacity-70" />
-                Super Admin
+                <Shield className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                <span className="truncate">{roleLabel}</span>
               </div>
             </div>
           </div>
 
-          {/* دکمه‌های پایین */}
-          <div className="mt-4 flex gap-2">
+          {/* دکمه پایین */}
+          <div className="mt-4 flex">
             <Link
               href="/profile"
               className={`flex flex-1 items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-medium transition-colors ${isDarkMode
@@ -223,17 +247,6 @@ export default function AdminHome() {
               <User className="h-4 w-4" />
               حساب کاربری
             </Link>
-
-            <button
-              type="button"
-              className={`flex flex-1 items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-medium transition-colors ${isDarkMode
-                ? "border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
-                : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
-                }`}
-            >
-              <LogIn className="h-4 w-4 rotate-180" />
-              خروج
-            </button>
           </div>
         </section>
       </div>

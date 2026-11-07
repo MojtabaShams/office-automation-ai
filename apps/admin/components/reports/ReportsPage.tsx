@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   BarChart3,
@@ -17,21 +17,13 @@ import {
   Users,
   Workflow,
   MessageSquare,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
-import { AreaChart, Area, ResponsiveContainer } from "recharts";
-import { useTheme } from "../../theme-context";
-import Modal from "../Modal";
-import ConfirmModal from "../ConfirmModal";
-import AuditLogTable from "./AuditLogTable";
-import ReportBuilderWizard from "./ReportBuilderWizard";
 import {
-  loadReports,
-  saveReports,
-  type ReportDefinition,
-} from "../../app/lib/mock-reports";
-import { runReport } from "./report-engine";
-import { getReportEntity } from "../../app/lib/report-entities";
-import {
+  AreaChart,
+  Area,
+  ResponsiveContainer,
   BarChart,
   Bar,
   LineChart,
@@ -45,90 +37,59 @@ import {
   CartesianGrid,
   ResponsiveContainer as RC,
 } from "recharts";
+import { useTheme } from "../../theme-context";
+import Modal from "../Modal";
+import ConfirmModal from "../ConfirmModal";
+import AuditLogTable, { type AuditAction, type AuditLog } from "./AuditLogTable";
+import ReportBuilderWizard from "./ReportBuilderWizard";
+import type { ReportDefinition } from "../../app/lib/report-types";
+import { runReport, type ReportResultRow } from "./report-engine";
+import { getReportEntity, loadReportEntities } from "../../app/lib/report-entities";
+import {
+  deleteReportDefinition,
+  getReportEvents,
+  getReportSummary,
+  listSavedReports,
+  type ReportEvent,
+  type ReportQuickTileId,
+  type ReportSummary,
+} from "../../app/lib/admin-api";
 
-/* ---------- گزارش‌های آماده (کاشی‌ها) ---------- */
-const miniChartData = [
-  { name: "ش", value: 12 },
-  { name: "ی", value: 19 },
-  { name: "د", value: 8 },
-  { name: "س", value: 15 },
-  { name: "چ", value: 22 },
-  { name: "پ", value: 18 },
-  { name: "ج", value: 10 },
-];
-
-const quickReports = [
+/* ---------- گزارش‌های آماده (کاشی‌ها) — اعداد از پایگاه داده ---------- */
+const quickReportMeta: {
+  id: ReportQuickTileId;
+  title: string;
+  desc: string;
+  icon: React.ElementType;
+  color: string;
+}[] = [
   {
     id: "requests",
     title: "آمار درخواست‌ها",
     desc: "تعداد درخواست‌های باز، بسته و در انتظار",
     icon: ClipboardList,
-    stat: "۱۸",
-    statLabel: "درخواست باز",
-    trend: "+۱۲٪",
-    trendUp: true,
-    chartData: miniChartData,
-    chartColor: "#15554f",
+    color: "#15554f",
   },
   {
     id: "employees",
     title: "عملکرد کارمندان",
-    desc: "تعداد درخواست‌های رسیدگی‌شده توسط هر کارمند",
+    desc: "تعداد درخواست‌های ثبت‌شده و کارمندان فعال",
     icon: Users,
-    stat: "۴۲",
-    statLabel: "کارمند فعال",
-    trend: "+۵٪",
-    trendUp: true,
-    chartData: [
-      { name: "ش", value: 8 },
-      { name: "ی", value: 14 },
-      { name: "د", value: 11 },
-      { name: "س", value: 17 },
-      { name: "چ", value: 9 },
-      { name: "پ", value: 13 },
-      { name: "ج", value: 6 },
-    ],
-    chartColor: "#3b82f6",
+    color: "#3b82f6",
   },
   {
     id: "processes",
     title: "وضعیت پروسه‌ها",
-    desc: "پروسه‌های در جریان، تکمیل‌شده و متوقف",
+    desc: "پروسه‌های فعال و پرونده‌های در جریان",
     icon: Workflow,
-    stat: "۷",
-    statLabel: "پروسه فعال",
-    trend: "-۲٪",
-    trendUp: false,
-    chartData: [
-      { name: "ش", value: 4 },
-      { name: "ی", value: 6 },
-      { name: "د", value: 5 },
-      { name: "س", value: 8 },
-      { name: "چ", value: 3 },
-      { name: "پ", value: 7 },
-      { name: "ج", value: 4 },
-    ],
-    chartColor: "#8b5cf6",
+    color: "#8b5cf6",
   },
   {
     id: "messages",
     title: "پیام‌های روزانه",
-    desc: "حجم پیام‌های ارسالی و خوانده‌نشده",
+    desc: "حجم پیام‌های متقاضی و دستیار در هفت روز گذشته",
     icon: MessageSquare,
-    stat: "۵",
-    statLabel: "خوانده‌نشده",
-    trend: "+۸٪",
-    trendUp: true,
-    chartData: [
-      { name: "ش", value: 20 },
-      { name: "ی", value: 15 },
-      { name: "د", value: 28 },
-      { name: "س", value: 12 },
-      { name: "چ", value: 22 },
-      { name: "پ", value: 18 },
-      { name: "ج", value: 9 },
-    ],
-    chartColor: "#f59e0b",
+    color: "#f59e0b",
   },
 ];
 
@@ -142,6 +103,30 @@ const displayLabel: Record<string, string> = {
   kpi: "کارت آماری",
 };
 
+/** Comparing the last two points of a daily series is enough for a tile trend. */
+function trendOf(series: number[]): { text: string; up: boolean } | null {
+  if (series.length < 2) return null;
+  const current = series[series.length - 1] ?? 0;
+  const previous = series[series.length - 2] ?? 0;
+  if (current === 0 && previous === 0) return null;
+  const delta = current - previous;
+  return { text: `${delta >= 0 ? "+" : "−"}${Math.abs(delta)}`, up: delta >= 0 };
+}
+
+function toChartData(labels: string[], values: number[]) {
+  return labels.map((name, index) => ({ name, value: values[index] ?? 0 }));
+}
+
+function displayDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 type TabId = "quick" | "saved" | "events";
 
 export default function ReportsPage() {
@@ -149,16 +134,48 @@ export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<TabId>("quick");
   const [builderOpen, setBuilderOpen] = useState(false);
   const [reports, setReports] = useState<ReportDefinition[]>([]);
+  const [summary, setSummary] = useState<ReportSummary | null>(null);
+  const [events, setEvents] = useState<ReportEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [runOpen, setRunOpen] = useState(false);
   const [running, setRunning] = useState<ReportDefinition | null>(null);
+  const [preview, setPreview] = useState<{
+    rows: ReportResultRow[];
+    metricLabels: Record<string, string>;
+  } | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [mainPaddingTop, setMainPaddingTop] = useState(0);
 
-  useEffect(() => {
-    setReports(loadReports());
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [summaryData, savedData, eventsData] = await Promise.all([
+        getReportSummary(),
+        listSavedReports(),
+        getReportEvents(100),
+        loadReportEntities(),
+      ]);
+      setSummary(summaryData);
+      setReports(savedData);
+      setEvents(eventsData);
+      setLoadError("");
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "دریافت گزارش‌ها از پایگاه داده با خطا مواجه شد.",
+      );
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadDashboard();
+  }, [loadDashboard]);
 
   useEffect(() => {
     const toolbar = toolbarRef.current;
@@ -182,13 +199,29 @@ export default function ReportsPage() {
     };
   }, []);
 
+  const auditLogs = useMemo<AuditLog[]>(
+    () =>
+      events.map((event) => ({
+        id: event.id,
+        userId: event.userId,
+        userName: event.userName,
+        action: event.action as AuditAction,
+        module: event.module,
+        recordId: event.recordId,
+        oldValues: event.oldValues,
+        newValues: event.newValues,
+        ipAddress: event.ipAddress,
+        userAgent: event.userAgent,
+        createdAt: event.createdAt ? new Date(event.createdAt) : new Date(0),
+      })),
+    [events],
+  );
+
   const surface = isDarkMode
     ? "border-white/10 bg-[#193632]/90 text-white shadow-black/10"
     : "border-[#d5dad4] bg-[#edf0eb]/90 text-[#28443d]";
   const muted = isDarkMode ? "text-white/55" : "text-[#68766c]";
-  const card = isDarkMode
-    ? "border-white/10 bg-[#193632]"
-    : "border-[#d5dad4] bg-white";
+  const card = isDarkMode ? "border-white/10 bg-[#193632]" : "border-[#d5dad4] bg-white";
 
   const tabBtn = (active: boolean) =>
     active
@@ -204,22 +237,47 @@ export default function ReportsPage() {
         ? "bg-white/10"
         : "bg-[#e6e9e3]";
 
-  const openRun = (report: ReportDefinition) => {
+  const openRun = async (report: ReportDefinition) => {
     setRunning(report);
     setRunOpen(true);
+    setPreview(null);
+    setPreviewBusy(true);
+    try {
+      await loadReportEntities();
+      setPreview(runReport(report));
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "اجرای گزارش با خطا مواجه شد.");
+    } finally {
+      setPreviewBusy(false);
+    }
   };
 
-  const handleDelete = () => {
+  const reloadSaved = useCallback(async () => {
+    try {
+      setReports(await listSavedReports());
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "دریافت گزارش‌های ذخیره‌شده با خطا مواجه شد.");
+    }
+  }, []);
+
+  const handleDelete = async () => {
     if (!deleteId) return;
-    const next = reports.filter((r) => r.id !== deleteId);
-    saveReports(next);
-    setReports(next);
-    setDeleteId(null);
+    setDeleteBusy(true);
+    try {
+      await deleteReportDefinition(deleteId);
+      setReports((current) => current.filter((report) => report.id !== deleteId));
+      setDeleteId(null);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "حذف گزارش با خطا مواجه شد.");
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   const exportExcel = async (report: ReportDefinition) => {
     try {
       const XLSX = await import("xlsx");
+      await loadReportEntities();
       const { rows, metricLabels } = runReport(report);
       if (!rows.length) {
         window.alert("داده‌ای برای خروجی وجود ندارد.");
@@ -237,8 +295,6 @@ export default function ReportsPage() {
     }
   };
 
-  const runPreview = running ? runReport(running) : null;
-
   return (
     <div dir="rtl" className={`w-full space-y-5 ${isDarkMode ? "text-white" : "text-[#28443d]"}`}>
       {/* هدر */}
@@ -248,9 +304,28 @@ export default function ReportsPage() {
           گزارشات
         </h1>
         <p className={`mt-1 text-xs ${muted}`}>
-          گزارش‌های آماده، گزارش‌های ذخیره‌شده و سازنده گزارش سفارشی
+          گزارش‌های آماده، گزارش‌های ذخیره‌شده و سازنده گزارش سفارشی — همه از پایگاه داده
         </p>
       </div>
+
+      {loadError && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-rose-500/25 bg-rose-500/10 p-3 text-xs text-rose-600"
+        >
+          <span className="inline-flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            {loadError}
+          </span>
+          <button
+            type="button"
+            onClick={() => void loadDashboard()}
+            className="rounded-full border border-rose-500/30 px-3 py-1 font-semibold hover:bg-rose-500/10"
+          >
+            تلاش دوباره
+          </button>
+        </div>
+      )}
 
       {/* نوار ابزار sticky */}
       <section
@@ -271,7 +346,7 @@ export default function ReportsPage() {
             <BarChart3 className="h-3.5 w-3.5" />
             گزارشات
             <span className={`rounded-full px-1.5 py-0.5 text-[0.65rem] ${tabCount(activeTab === "quick")}`}>
-              {quickReports.length}
+              {quickReportMeta.length}
             </span>
           </button>
 
@@ -315,7 +390,7 @@ export default function ReportsPage() {
             <History className="h-3.5 w-3.5" />
             رویدادهای سیستم
             <span className={`rounded-full px-1.5 py-0.5 text-[0.65rem] ${tabCount(activeTab === "events")}`}>
-              7
+              {auditLogs.length}
             </span>
           </button>
         </div>
@@ -323,74 +398,94 @@ export default function ReportsPage() {
 
       {/* ========== تب گزارشات آماده ========== */}
       {activeTab === "quick" && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {quickReports.map((report) => (
-            <div
-              key={report.id}
-              className={`rounded-2xl border p-4 transition-colors ${card} ${
-                isDarkMode ? "hover:bg-[#1f403b]" : "hover:bg-[#f8f9f6]"
-              }`}
-            >
-              <div className="mb-3 flex items-start justify-between gap-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#15554f]/10 text-[#15554f]">
-                  <report.icon className="h-5 w-5" />
-                </div>
-                <div
-                  className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-semibold ${
-                    report.trendUp
-                      ? "bg-emerald-500/10 text-emerald-600"
-                      : "bg-rose-500/10 text-rose-600"
-                  }`}
-                >
-                  {report.trendUp ? (
-                    <TrendingUp className="h-3 w-3" />
-                  ) : (
-                    <TrendingDown className="h-3 w-3" />
-                  )}
-                  {report.trend}
-                </div>
-              </div>
-
-              <h3 className="text-sm font-bold">{report.title}</h3>
-              <p className={`mt-1 text-[0.7rem] leading-relaxed ${muted}`}>{report.desc}</p>
-
-              <div className="mt-3 flex items-end justify-between gap-2">
-                <div>
-                  <div className="text-2xl font-black tracking-tight">{report.stat}</div>
-                  <div className={`text-[0.65rem] ${muted}`}>{report.statLabel}</div>
-                </div>
-                <div className="h-12 w-24">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={report.chartData}>
-                      <defs>
-                        <linearGradient id={`grad-${report.id}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={report.chartColor} stopOpacity={0.35} />
-                          <stop offset="100%" stopColor={report.chartColor} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <Area
-                        type="monotone"
-                        dataKey="value"
-                        stroke={report.chartColor}
-                        strokeWidth={1.5}
-                        fill={`url(#grad-${report.id})`}
-                        isAnimationActive={false}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              <Link
-                href={`/reports/${report.id}`}
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-[#15554f] bg-[#15554f] px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-[#124740]"
-              >
-                <Play className="h-3.5 w-3.5 text-white" strokeWidth={2.5} />
-                <span className="text-white">اجرای گزارش</span>
-              </Link>
+        <>
+          {loading && !summary ? (
+            <div className={`flex items-center justify-center gap-2 rounded-2xl border p-10 text-sm ${card} ${muted}`}>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              در حال محاسبه گزارش‌ها از پایگاه داده…
             </div>
-          ))}
-        </div>
+          ) : summary ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {quickReportMeta.map((meta) => {
+                const tile = summary.quick[meta.id];
+                const trend = tile ? trendOf(tile.series) : null;
+                const chartData = tile ? toChartData(summary.weekly.labels, tile.series) : [];
+                return (
+                  <div
+                    key={meta.id}
+                    className={`rounded-2xl border p-4 transition-colors ${card} ${
+                      isDarkMode ? "hover:bg-[#1f403b]" : "hover:bg-[#f8f9f6]"
+                    }`}
+                  >
+                    <div className="mb-3 flex items-start justify-between gap-2">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#15554f]/10 text-[#15554f]">
+                        <meta.icon className="h-5 w-5" />
+                      </div>
+                      {trend ? (
+                        <div
+                          className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-semibold ${
+                            trend.up
+                              ? "bg-emerald-500/10 text-emerald-600"
+                              : "bg-rose-500/10 text-rose-600"
+                          }`}
+                        >
+                          {trend.up ? (
+                            <TrendingUp className="h-3 w-3" />
+                          ) : (
+                            <TrendingDown className="h-3 w-3" />
+                          )}
+                          {trend.text}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <h3 className="text-sm font-bold">{meta.title}</h3>
+                    <p className={`mt-1 text-[0.7rem] leading-relaxed ${muted}`}>{meta.desc}</p>
+
+                    <div className="mt-3 flex items-end justify-between gap-2">
+                      <div>
+                        <div className="text-2xl font-black tracking-tight">
+                          {(tile?.stat ?? 0).toLocaleString("fa-IR")}
+                        </div>
+                        <div className={`text-[0.65rem] ${muted}`}>
+                          {tile?.statLabel ?? "—"}
+                        </div>
+                      </div>
+                      <div className="h-12 w-24">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={chartData}>
+                            <defs>
+                              <linearGradient id={`grad-${meta.id}`} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={meta.color} stopOpacity={0.35} />
+                                <stop offset="100%" stopColor={meta.color} stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <Area
+                              type="monotone"
+                              dataKey="value"
+                              stroke={meta.color}
+                              strokeWidth={1.5}
+                              fill={`url(#grad-${meta.id})`}
+                              isAnimationActive={false}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    <Link
+                      href={`/reports/${meta.id}`}
+                      className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-[#15554f] bg-[#15554f] px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-[#124740]"
+                    >
+                      <Play className="h-3.5 w-3.5 text-white" strokeWidth={2.5} />
+                      <span className="text-white">اجرای گزارش</span>
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </>
       )}
 
       {/* ========== تب گزارشات من ========== */}
@@ -415,11 +510,7 @@ export default function ReportsPage() {
           ) : (
             reports.map((report) => {
               const entity = getReportEntity(report.entityId);
-              const updated = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit",
-              }).format(new Date(report.updatedAt));
+              const updated = displayDate(report.updatedAt);
 
               return (
                 <div
@@ -434,7 +525,7 @@ export default function ReportsPage() {
                           isDarkMode ? "bg-white/10 text-white/70" : "bg-[#e6e9e3] text-[#53665b]"
                         }`}
                       >
-                        {displayLabel[report.display.type] ?? report.display.type}
+                        {displayLabel[report.display?.type] ?? report.display?.type ?? "—"}
                       </span>
                     </div>
                     <div className={`mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[0.75rem] ${muted}`}>
@@ -446,7 +537,7 @@ export default function ReportsPage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => openRun(report)}
+                      onClick={() => void openRun(report)}
                       className="inline-flex items-center gap-1.5 rounded-full border border-[#15554f] bg-[#15554f] px-3 py-1.5 text-[0.7rem] font-semibold text-white transition hover:bg-[#124740]"
                     >
                       <Play className="h-3.5 w-3.5 text-white" />
@@ -454,7 +545,7 @@ export default function ReportsPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => openRun(report)}
+                      onClick={() => void openRun(report)}
                       className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition ${
                         isDarkMode
                           ? "border-white/15 bg-white/[0.06] text-white/80 hover:bg-white/10"
@@ -466,7 +557,7 @@ export default function ReportsPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => exportExcel(report)}
+                      onClick={() => void exportExcel(report)}
                       className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition ${
                         isDarkMode
                           ? "border-white/15 bg-white/[0.06] text-white/80 hover:bg-white/10"
@@ -492,7 +583,15 @@ export default function ReportsPage() {
       )}
 
       {/* ========== تب رویدادهای سیستم ========== */}
-      {activeTab === "events" && <AuditLogTable />}
+      {activeTab === "events" &&
+        (loading && !auditLogs.length ? (
+          <div className={`flex items-center justify-center gap-2 rounded-2xl border p-10 text-sm ${card} ${muted}`}>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            در حال دریافت رویدادها…
+          </div>
+        ) : (
+          <AuditLogTable data={auditLogs} />
+        ))}
 
       {/* Modal سازنده گزارش */}
       <Modal
@@ -503,7 +602,7 @@ export default function ReportsPage() {
       >
         <ReportBuilderWizard
           onClose={() => setBuilderOpen(false)}
-          onSaved={() => setReports(loadReports())}
+          onSaved={() => void reloadSaved()}
         />
       </Modal>
 
@@ -513,20 +612,21 @@ export default function ReportsPage() {
         onClose={() => {
           setRunOpen(false);
           setRunning(null);
+          setPreview(null);
         }}
         title={running?.title ?? "نتیجه گزارش"}
         maxWidthClass="max-w-3xl"
       >
-        {running && runPreview && (
+        {running && (
           <div className="space-y-4">
             <div className={`flex flex-wrap items-center justify-between gap-2 text-xs ${muted}`}>
               <span>
                 منبع: {getReportEntity(running.entityId)?.label ?? running.entityId} ·{" "}
-                {displayLabel[running.display.type]}
+                {displayLabel[running.display?.type] ?? running.display?.type ?? "—"}
               </span>
               <button
                 type="button"
-                onClick={() => exportExcel(running)}
+                onClick={() => void exportExcel(running)}
                 className="inline-flex items-center gap-1.5 rounded-full border border-[#15554f] bg-[#15554f] px-3 py-1.5 text-[0.7rem] font-semibold text-white hover:bg-[#124740]"
               >
                 <Download className="h-3.5 w-3.5" />
@@ -534,20 +634,25 @@ export default function ReportsPage() {
               </button>
             </div>
 
-            {running.display.type === "table" || running.display.type === "kpi" ? (
+            {previewBusy || !preview ? (
+              <div className={`flex items-center justify-center gap-2 py-12 text-sm ${muted}`}>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                در حال محاسبه…
+              </div>
+            ) : running.display?.type === "table" || running.display?.type === "kpi" ? (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[320px] text-right text-xs">
                   <thead>
                     <tr className={`border-b ${isDarkMode ? "border-white/10" : "border-[#d5dad4]"}`}>
-                      {Object.keys(runPreview.rows[0] ?? runPreview.metricLabels).map((k) => (
+                      {Object.keys(preview.rows[0] ?? preview.metricLabels).map((k) => (
                         <th key={k} className={`px-2 py-2 font-semibold ${muted}`}>
-                          {runPreview.metricLabels[k] ?? k}
+                          {preview.metricLabels[k] ?? k}
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {runPreview.rows.map((row, i) => (
+                    {preview.rows.map((row, i) => (
                       <tr
                         key={i}
                         className={`border-b last:border-0 ${
@@ -561,7 +666,7 @@ export default function ReportsPage() {
                         ))}
                       </tr>
                     ))}
-                    {!runPreview.rows.length && (
+                    {!preview.rows.length && (
                       <tr>
                         <td colSpan={8} className={`p-6 text-center ${muted}`}>
                           داده‌ای یافت نشد
@@ -574,11 +679,11 @@ export default function ReportsPage() {
             ) : (
               <div className="h-64">
                 <RC width="100%" height="100%">
-                  {running.display.type === "pie" ? (
+                  {running.display?.type === "pie" ? (
                     <PieChart>
                       <Pie
-                        data={runPreview.rows}
-                        dataKey={running.display.yMetricIds?.[0] ?? Object.keys(runPreview.metricLabels)[0] ?? "value"}
+                        data={preview.rows}
+                        dataKey={running.display.yMetricIds?.[0] ?? Object.keys(preview.metricLabels)[0] ?? "value"}
                         nameKey={
                           running.display.xFieldId ??
                           running.groupBy[0]?.fieldId ??
@@ -586,29 +691,27 @@ export default function ReportsPage() {
                         }
                         outerRadius={90}
                       >
-                        {runPreview.rows.map((_, i) => (
+                        {preview.rows.map((_, i) => (
                           <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                         ))}
                       </Pie>
                       <Tooltip />
                     </PieChart>
-                  ) : running.display.type === "line" ? (
-                    <LineChart data={runPreview.rows}>
+                  ) : running.display?.type === "line" ? (
+                    <LineChart data={preview.rows}>
                       <CartesianGrid
                         strokeDasharray="3 3"
                         stroke={isDarkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
                       />
                       <XAxis
-                        dataKey={
-                          running.display.xFieldId ?? running.groupBy[0]?.fieldId
-                        }
+                        dataKey={running.display.xFieldId ?? running.groupBy[0]?.fieldId}
                         tick={{ fontSize: 11 }}
                       />
                       <YAxis tick={{ fontSize: 11 }} />
                       <Tooltip />
                       {(running.display.yMetricIds?.length
                         ? running.display.yMetricIds
-                        : Object.keys(runPreview.metricLabels)
+                        : Object.keys(preview.metricLabels)
                       ).map((id, i) => (
                         <Line
                           key={id}
@@ -620,22 +723,20 @@ export default function ReportsPage() {
                       ))}
                     </LineChart>
                   ) : (
-                    <BarChart data={runPreview.rows}>
+                    <BarChart data={preview.rows}>
                       <CartesianGrid
                         strokeDasharray="3 3"
                         stroke={isDarkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
                       />
                       <XAxis
-                        dataKey={
-                          running.display.xFieldId ?? running.groupBy[0]?.fieldId
-                        }
+                        dataKey={running.display?.xFieldId ?? running.groupBy[0]?.fieldId}
                         tick={{ fontSize: 11 }}
                       />
                       <YAxis tick={{ fontSize: 11 }} />
                       <Tooltip />
-                      {(running.display.yMetricIds?.length
+                      {(running.display?.yMetricIds?.length
                         ? running.display.yMetricIds
-                        : Object.keys(runPreview.metricLabels)
+                        : Object.keys(preview.metricLabels)
                       ).map((id, i) => (
                         <Bar
                           key={id}
@@ -657,9 +758,13 @@ export default function ReportsPage() {
       <ConfirmModal
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
-        onConfirm={handleDelete}
+        onConfirm={() => void handleDelete()}
         title="حذف گزارش"
-        message="آیا از حذف این گزارش مطمئن هستید؟ این عمل قابل بازگشت نیست."
+        message={
+          deleteBusy
+            ? "در حال حذف گزارش…"
+            : "آیا از حذف این گزارش مطمئن هستید؟ گزارش به‌صورت نرم حذف می‌شود و برای حسابرسی در پایگاه داده باقی می‌ماند."
+        }
         confirmLabel="حذف شود"
         danger
       />

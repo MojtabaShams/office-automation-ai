@@ -1,0 +1,47 @@
+{
+  "id": "construction_permit",
+  "title": "فرم درخواست پروانه ساختمانی",
+  "description": "ثبت اطلاعات اولیه ملک و درخواست صدور پروانه ساختمانی.",
+  "category": "شهرداری",
+  "submitLabel": "ادامه مراحل پروانه",
+  "sortOrder": 20,
+  "fields": [
+    {
+      "name": "applicant_name",
+      "label": "نام و نام خانوادگی متقاضی",
+      "type": "text",
+      "required": true,
+      "minLength": 3,
+      "maxLength": 80
+    },
+    {
+      "name": "national_id",
+      "label": "کد ملی",
+      "type": "text",
+      "required": true,
+      "pattern": "^\\d{10}$"
+    },
+    {
+      "name": "property_address",
+      "label": "نشانی ملک",
+      "type": "textarea",
+      "required": true,
+      "minLength": 10,
+      "maxLength": 500
+    },
+    {
+      "name": "area",
+      "label": "مساحت زمین (متر مربع)",
+      "type": "number",
+      "required": true,
+      "min": 1
+    },
+    {
+      "name": "building_type",
+      "label": "نوع کاربری ساختمان",
+      "type": "select",
+      "required": true,
+      "options": ["مسکونی", "اداری", "تجاری", "صنعتی"]
+    }
+  ]
+}

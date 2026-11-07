@@ -1,4 +1,33 @@
-fastapi
-uvicorn
-pydantic
-python-multipart
+﻿# Runtime dependencies for the Office Automation AI agent.
+# Versions are pinned to the ones the project is verified against (Python 3.11+).
+
+# --- web framework -----------------------------------------------------------
+fastapi==0.161.1
+uvicorn[standard]==0.54.0
+pydantic==2.14.1
+pydantic-settings==2.16.1
+
+# --- persistence -------------------------------------------------------------
+SQLAlchemy==2.1.6
+psycopg[binary]==3.3.6
+pgvector==0.5.1
+alembic==1.20.1
+
+# --- agent / RAG -------------------------------------------------------------
+langchain-core==1.7.0
+# GapGPT (OpenAI-compatible) powers the Gemini + ChatGPT + Claude ensemble.
+langchain-openai>=1.0,<2
+openai>=1.100,<4
+# Legacy single-model fallback when GAPGPT_API_KEY is not configured.
+langchain-groq==1.1.3
+langgraph==1.2.16
+agentscope==2.0.11
+
+# --- http client (optional OpenAI-compatible embedding provider) -------------
+httpx==0.28.1
+
+# --- reference documents (form builder uploads + text extraction) ------------
+python-multipart>=0.0.20,<0.1
+pypdf>=5,<7
+python-docx>=1.1,<2
+Pillow>=11,<13

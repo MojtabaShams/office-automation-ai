@@ -93,3 +93,13 @@ export function getUnitCategoryId(unitId: string | undefined): UnitCategoryId | 
     category.units.some((unit) => unit.id === unitId || unit.label === unitId),
   )?.id;
 }
+
+/**
+ * برچسب فارسی واحد برای نمایش به کاربر (L1).
+ * شناسه‌ی خام مثل `square-meter` هرگز نباید در رابط دیده شود؛ اگر مقدار
+ * از قبل برچسب باشد (داده‌ی قدیمی) همان برمی‌گردد.
+ */
+export function unitLabelOf(unit: string | undefined): string {
+  if (!unit) return "";
+  return UNIT_LABELS[unit] ?? unit;
+}

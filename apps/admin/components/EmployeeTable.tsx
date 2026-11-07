@@ -21,19 +21,19 @@ import {
   ArrowDown,
   ArrowUpDown,
   Download,
-  FileSpreadsheet,
   ChevronRight,
   ChevronLeft,
 } from "lucide-react";
 import { useTheme } from "../theme-context";
-import { Employee, AccessLevel } from "../app/lib/mock-employees";
+import type { Employee } from "../app/lib/employee-view";
 import { formatJalali } from "../app/lib/jalali";
 import JalaliDateRangeFilter, { DateRangeValue } from "./JalaliDateRangeFilter";
 import ThemedSelect from "./ThemedSelect";
 
 const dateRangeFilterFn: FilterFn<Employee> = (row, columnId, filterValue: DateRangeValue) => {
   if (!filterValue) return true;
-  const value = row.getValue(columnId) as Date;
+  const value = row.getValue(columnId) as Date | null;
+  if (!value) return false;
   if (filterValue.from && value < filterValue.from) return false;
   if (filterValue.to && value > filterValue.to) return false;
   return true;
@@ -51,7 +51,9 @@ const globalFilterFn: FilterFn<Employee> = (row, _columnId, filterValue) => {
 function getCellText(employee: Employee, columnId: string, value: unknown) {
   if (columnId === "select") return "";
   if (columnId === "status") return employee.status === "active" ? "فعال" : "غیرفعال";
-  if (columnId === "hireDate") return formatJalali(employee.hireDate);
+  if (columnId === "lastLoginAt") {
+    return employee.lastLoginAt ? formatJalali(employee.lastLoginAt) : "—";
+  }
   return String(value ?? "");
 }
 
@@ -121,36 +123,30 @@ function HighlightedText({
 
 export default function EmployeeTable({
   data,
-  accessLevels,
   globalFilter,
   selectedId,
   onSelect,
   columnVisibility,
   onColumnVisibilityChange,
   onFilteredCountChange,
-  onImportClick,
   activeMatch,
   onActiveMatchChange,
   onMatchCountChange,
   stickyHeaderTop,
 }: {
   data: Employee[];
-  accessLevels: AccessLevel[];
   globalFilter: string;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   columnVisibility: VisibilityState;
   onColumnVisibilityChange: OnChangeFn<VisibilityState>;
   onFilteredCountChange: (count: number) => void;
-  onImportClick: () => void;
   activeMatch: number;
   onActiveMatchChange: (index: number) => void;
   onMatchCountChange: (count: number) => void;
   stickyHeaderTop: number;
 }) {
   const { isDarkMode } = useTheme();
-
-  const accessLevelName = (id: string) => accessLevels.find((l) => l.id === id)?.name ?? "—";
 
   const columns = useMemo<ColumnDef<Employee>[]>(
     () => [
@@ -183,15 +179,8 @@ export default function EmployeeTable({
       },
       { accessorKey: "email", header: "ایمیل", size: 190, minSize: 130, maxSize: 400 },
       { accessorKey: "phone", header: "شماره تماس", size: 130, minSize: 100, maxSize: 280 },
-      { accessorKey: "role", header: "نقش شغلی", size: 145, minSize: 105, maxSize: 320 },
-      {
-        id: "accessLevel",
-        accessorFn: (row) => accessLevelName(row.accessLevelId),
-        header: "سطح دسترسی",
-        size: 135,
-        minSize: 100,
-        maxSize: 300,
-      },
+      { accessorKey: "unit", header: "واحد سازمانی", size: 145, minSize: 105, maxSize: 320 },
+      { accessorKey: "role", header: "نقش", size: 130, minSize: 100, maxSize: 320 },
       {
         accessorKey: "status",
         header: "وضعیت",
@@ -221,18 +210,21 @@ export default function EmployeeTable({
         },
       },
       {
-        accessorKey: "hireDate",
-        header: "تاریخ استخدام",
+        accessorKey: "lastLoginAt",
+        header: "آخرین ورود",
         size: 155,
         minSize: 115,
         maxSize: 300,
-        cell: ({ getValue }) => formatJalali(getValue() as Date),
+        cell: ({ getValue }) => {
+          const value = getValue() as Date | null;
+          return value ? formatJalali(value) : "—";
+        },
         filterFn: dateRangeFilterFn,
         sortingFn: (a, b) =>
-          (a.original.hireDate as Date).getTime() - (b.original.hireDate as Date).getTime(),
+          (a.original.lastLoginAt?.getTime() ?? 0) - (b.original.lastLoginAt?.getTime() ?? 0),
       },
     ],
-    [accessLevels, selectedId, isDarkMode]
+    [selectedId, isDarkMode]
   );
 
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -330,7 +322,7 @@ export default function EmployeeTable({
     });
 
     return { byCell, rowIndices, total };
-  }, [searchableRows, globalFilter, columnVisibility, accessLevels]);
+  }, [searchableRows, globalFilter, columnVisibility]);
   const totalMatches = matchLayout.total;
 
   useEffect(() => {
@@ -402,19 +394,19 @@ export default function EmployeeTable({
         "نام و نام خانوادگی",
         "ایمیل",
         "شماره تماس",
-        "نقش شغلی",
-        "سطح دسترسی",
+        "واحد سازمانی",
+        "نقش",
         "وضعیت",
-        "تاریخ استخدام",
+        "آخرین ورود",
       ];
       const rows = table.getFilteredRowModel().rows.map(({ original }) => [
         original.fullName,
         original.email,
         original.phone,
+        original.unit,
         original.role,
-        accessLevelName(original.accessLevelId),
         original.status === "active" ? "فعال" : "غیرفعال",
-        formatJalali(original.hireDate),
+        original.lastLoginAt ? formatJalali(original.lastLoginAt) : "—",
       ]);
       const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
       const workbook = XLSX.utils.book_new();
@@ -430,7 +422,10 @@ export default function EmployeeTable({
     ? {
       wrap: "border-white/10 bg-[#193632]",
       head: "bg-[#193632] text-slate-200 border-white/10",
-      row: "border-white/5 hover:bg-white/[0.03]",
+      row: "border-white/10 hover:bg-white/[0.03]",
+      rowBase: "bg-[#193632]",
+      rowAlt: "bg-[#1f403b]",
+      cellBorder: "border-white/10",
       rowSelected: "bg-[#15554f]/25",
       sub: "text-slate-400",
       input: "border-white/10 bg-white/[0.06] text-white placeholder:text-white/35",
@@ -438,9 +433,12 @@ export default function EmployeeTable({
       panel: "border-white/10 bg-[#17332f] text-white",
     }
     : {
-      wrap: "border-[#d5dad4] bg-[#fafbf9]",
+      wrap: "border-[#d5dad4] bg-white",
       head: "bg-[#edf0eb] text-[#40584e] border-[#d5dad4]",
-      row: "border-[#e6e9e3] hover:bg-[#f6f7f4]",
+      row: "border-[#d5dad4] hover:bg-[#f6f7f4]",
+      rowBase: "bg-white",
+      rowAlt: "bg-[#f1f3ef]",
+      cellBorder: "border-[#d5dad4]",
       rowSelected: "bg-[#e2eee8]",
       sub: "text-[#718074]",
       input: "border-[#d5dad4] bg-[#fafbf9] text-[#28443d] placeholder:text-[#8c9587]",
@@ -464,7 +462,7 @@ export default function EmployeeTable({
                       top: stickyHeaderTop,
                       zIndex: 25,
                     }}
-                    className={`select-none p-0 align-top shadow-[0_1px_0_0_rgba(0,0,0,0.06)] ${t.head}`}
+                    className={`select-none border-b border-e p-0 align-top shadow-[0_1px_0_0_rgba(0,0,0,0.06)] ${t.head} ${t.cellBorder}`}
                   >
                     <div className="flex items-center justify-between gap-1 px-2 py-2">
                       <button
@@ -487,7 +485,7 @@ export default function EmployeeTable({
 
                     {header.column.getCanFilter() && (
                       <div className="px-2 pb-2">
-                        {header.column.id === "hireDate" ? (
+                        {header.column.id === "lastLoginAt" ? (
                           <JalaliDateRangeFilter
                             value={header.column.getFilterValue() as DateRangeValue}
                             onChange={(v) => header.column.setFilterValue(v)}
@@ -528,18 +526,23 @@ export default function EmployeeTable({
             ))}
           </thead>
           <tbody>
-            {table.getRowModel().rows.map((row) => (
+            {table.getRowModel().rows.map((row, rowIndex) => (
               <tr
                 key={row.id}
                 onClick={() => onSelect(selectedId === row.original.id ? null : row.original.id)}
-                className={`cursor-pointer border-b transition-colors ${t.row} ${selectedId === row.original.id ? t.rowSelected : ""
-                  }`}
+                className={`cursor-pointer border-b transition-colors ${t.row} ${
+                  selectedId === row.original.id
+                    ? t.rowSelected
+                    : rowIndex % 2 === 1
+                      ? t.rowAlt
+                      : t.rowBase
+                }`}
               >
                 {row.getVisibleCells().map((cell) => (
                   <td
                     key={cell.id}
                     style={{ width: `${(cell.column.getSize() / visibleColumnSize) * 100}%` }}
-                    className="relative z-0 break-words px-2 py-2.5"
+                    className={`relative z-0 break-words border-b border-e px-2 py-2.5 ${t.cellBorder}`}
                   >
                     {cell.column.id === "select" ? (
                       flexRender(cell.column.columnDef.cell, cell.getContext())
@@ -596,14 +599,6 @@ export default function EmployeeTable({
 
       <div className={`flex flex-wrap items-center justify-between gap-3 border-t p-3 ${t.head}`}>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={onImportClick}
-            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors ${t.chip}`}
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" />
-            ورود از Excel
-          </button>
           <button
             type="button"
             onClick={exportToExcel}

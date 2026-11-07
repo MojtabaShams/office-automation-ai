@@ -1,7 +1,6 @@
 import type { UnitCategoryId } from "./units";
-import { initialForms, type FormDefinition } from "./mock-forms";
+import { initialForms } from "./mock-forms";
 
-export { initialForms, saveForms } from "./mock-forms";
 export type { FormDefinition, FormType, FormVersionSnapshot, ValidationRule } from "./mock-forms";
 
 export type ProcessStatus = "active" | "inactive" | "draft" | "archived";
@@ -14,47 +13,122 @@ export type ProcessFieldType =
   | "radio"
   | "boolean"
   | "repeater"
-  | "section";
+  | "section"
+  | "payment"
+  | "computed";
 export type ProcessConditionOperator = "equals" | "notEquals" | "contains" | "isEmpty" | "greaterThan" | "lessThan";
 
 export type ProcessFieldCondition = {
   logic?: "and" | "or";
   clauses?: { variableId: string; operator: ProcessConditionOperator; value: string }[];
+  /** @deprecated نگه‌داری برای داده‌های قدیمی؛ در نرمال‌سازی خوانده می‌شود. */
   fieldKey?: string;
+  /** @deprecated */
   operator?: ProcessConditionOperator;
+  /** @deprecated */
   value?: string;
 };
+
+/* ------------------------------------------------------------ اعتبارسنجی فیلد */
+
+export type ValidationPreset =
+  | "national_id"
+  | "mobile_ir"
+  | "postal_code_ir"
+  | "iban_ir";
+
+/**
+ * قواعد ماشین‌خوان فیلد. این شیء همان چیزی است که بک‌اند نیز اعتبارسنجی می‌کند.
+ */
+export type FieldValidation = {
+  minLength?: number;
+  maxLength?: number;
+  min?: number;
+  max?: number;
+  pattern?: string;
+  patternMessage?: string;
+  preset?: ValidationPreset;
+};
+
+/* ---------------------------------------------------------------- مسئول مرحله */
+
+export type Assignee =
+  | { kind: "applicant" }
+  | { kind: "role"; accessLevelId: string }
+  | { kind: "employee"; employeeId: string };
+
+/** @deprecated فقط برای سازگاری با داده‌های قدیمی. */
 export type StageAssigneeType = "applicant" | "employee";
 export type PaymentMode = "none" | "fixed" | "formula";
+
+/* ------------------------------------------------------ خروجی و مهلت مرحله */
+
+export type RejectPolicy = "return_to_applicant" | "reject_final";
+
+export type StageEscalation = {
+  afterDays: number;
+  to: Assignee;
+};
+
+/** پایانه‌های مسیر: مرحله بعدی یا یکی از این دو مقدار. */
+export const ROUTE_COMPLETE = "__complete__";
+export const ROUTE_REJECT = "__reject__";
+export type RouteTarget = string;
 
 export type ProcessStage = {
   id: string;
   title: string;
-  assigneeType: StageAssigneeType;
-  assigneeRole: string;
+  assignee: Assignee;
   slaDays: number;
   formIds?: string[];
   formVersions?: Record<string, string>;
   guidance?: string;
   routeRules?: StageRouteRule[];
   defaultNextStageId?: string;
+  /** پیش‌فرض مراحل کارشناسی: return_to_applicant */
+  onReject?: RejectPolicy;
+  escalation?: StageEscalation;
+  /** @deprecated برچسب متنی قدیمی؛ پس از نرمال‌سازی فقط برای نمایش نگه داشته می‌شود. */
+  assigneeRole?: string;
+  /** برچسب متنی كه قابل نگاشت به نقش/کارمند نبوده و باید در انتشار رفع شود. */
+  legacyAssigneeLabel?: string;
+  /** @deprecated */
+  assigneeType?: StageAssigneeType;
 };
 
 export type StageRouteRule = {
   id: string;
   condition: import("../../components/ConditionFormulaEditor").ConditionValue;
-  nextStageId: string;
+  nextStageId: RouteTarget;
 };
+
+export type ComputedDestination =
+  | { kind: "internal" }
+  | { kind: "form_field"; stageId: string; formId: string; fieldId: string }
+  | { kind: "payment_amount"; stageId: string; formId: string; fieldId: string };
 
 export type ComputedProcessField = {
   id: string;
   name: string;
   formula: import("../../components/ConditionFormulaEditor").FormulaValue;
   unit?: string;
-  destination: "internal" | "form";
-  destinationStageId?: string;
-  destinationFormId?: string;
-  destinationFieldId?: string;
+  unitCategory?: UnitCategoryId;
+  destination: ComputedDestination;
+};
+
+export type PaymentAmountSource = "fixed" | "form_formula" | "process_variable";
+
+export type PaymentFieldConfig = {
+  gatewayId?: string;
+  amountSource?: PaymentAmountSource;
+  defaultAmount?: number;
+  amountFormula?: import("../../components/ConditionFormulaEditor").FormulaValue;
+  /** فقط وقتی amountSource = process_variable */
+  processVariableId?: string;
+};
+
+export type ComputedFieldConfig = {
+  formula?: import("../../components/ConditionFormulaEditor").FormulaValue;
 };
 
 export type ProcessField = {
@@ -74,7 +148,23 @@ export type ProcessField = {
   maxFileSizeMb?: number;
   minFiles?: number;
   maxFiles?: number;
+  /** قواعد ماشین‌خوان (H4) */
+  validation?: FieldValidation;
+  /** متن راهنمای متقاضی که زیر فیلد نمایش داده می‌شود (L2) */
+  helpText?: string;
+  /** فقط type = "payment" */
+  payment?: PaymentFieldConfig;
+  /** فقط type = "computed" — همان فرم، فیلدهای عددی قبلی */
+  computed?: ComputedFieldConfig;
 };
+
+export function isPaymentField(field: ProcessField): boolean {
+  return field.type === "payment";
+}
+
+export function isComputedField(field: ProcessField): boolean {
+  return field.type === "computed";
+}
 
 export type ProcessDefinition = {
   id: string;
@@ -93,13 +183,38 @@ export type ProcessDefinition = {
   applicantGuidance: string;
   payment: { mode: PaymentMode; provider: string; amount: number; formula: string };
   computedFields?: ComputedProcessField[];
-  publishedVersions?: { version: string; publishedAt: string; stages: ProcessStage[]; fields: ProcessField[]; payment: ProcessDefinition["payment"] }[];
+  publishedVersions?: ProcessPublishedVersion[];
   sourceFileName?: string;
   directiveFileNames: string[];
+  /** بازنویسی دستی خلاصه مشاوره متقاضی (L4) */
+  consultation?: ProcessConsultation;
 };
 
-export const PROCESS_STORAGE_KEY = "office-admin-process-definitions-v1";
-export { FORM_STORAGE_KEY } from "./mock-forms";
+/** متن‌های بازنویسی‌شده‌ی خلاصه مشاوره؛ فقط بخش‌های واردشده جایگزین می‌شوند. */
+export type ProcessConsultation = {
+  requiredDocumentsText?: string;
+  feesText?: string;
+  estimatedDurationDays?: number;
+  prerequisites?: string;
+};
+
+/**
+ * عکس فوری نسخه منتشرشده. همه‌ی اجزای اجرایی مرحله (مسئول، خروجی، مهلت،
+ * قواعد مسیر و محاسبات) در آن قفل می‌شوند تا نسخه‌های قدیمی از کار نیفتند.
+ */
+export type ProcessPublishedVersion = {
+  version: string;
+  publishedAt: string;
+  stages: ProcessStage[];
+  fields: ProcessField[];
+  payment: ProcessDefinition["payment"];
+  computedFields?: ComputedProcessField[];
+  formVersions?: Record<string, string>;
+  lockedForms?: { formId: string; version: string; title: string }[];
+  /** خلاصه مشاوره‌ی زمان انتشار (L4) */
+  consultation?: ProcessConsultation;
+};
+
 export const PROCESS_DEPARTMENTS = [
   "شهرسازی",
   "منابع انسانی",
@@ -120,8 +235,9 @@ const stages = (titles: string[], role: string): ProcessStage[] =>
   titles.map((title, index) => ({
     id: `${index + 1}-${title.replace(/\s+/g, "-")}`,
     title,
-    assigneeType: index === 0 ? "applicant" : "employee",
+    assignee: index === 0 ? { kind: "applicant" } : { kind: "role", accessLevelId: "" },
     assigneeRole: index === 0 ? "متقاضی" : role,
+    onReject: index === 0 ? "reject_final" : "return_to_applicant",
     slaDays: index === 0 ? 1 : 3,
     formIds: [],
     guidance: "",
@@ -194,9 +310,8 @@ export const initialProcesses: ProcessDefinition[] = [
       name: "هزینه بررسی",
       formula: { tokens: [{ kind: "variable", variableId: "form-construction-application:property-area" }, { kind: "operator", value: "*" }, { kind: "number", value: "2500" }] },
       unit: "rial",
-      destination: "form",
-      destinationStageId: constructionStages[2]!.id,
-      destinationFormId: "form-payment-fee",
+      unitCategory: "currency",
+      destination: { kind: "payment_amount", stageId: constructionStages[2]!.id, formId: "form-payment-fee", fieldId: "payment" },
     }],
     publishedVersions: [],
     sourceFileName: "فرم-پروانه-ساختمانی.docx",
@@ -291,10 +406,6 @@ export const initialProcesses: ProcessDefinition[] = [
   },
 ];
 
-export function saveProcesses(processes: ProcessDefinition[]) {
-  window.localStorage.setItem(PROCESS_STORAGE_KEY, JSON.stringify(processes));
-}
-
 export function formatProcessDate(value: string) {
   return new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
     year: "numeric",
@@ -305,4 +416,170 @@ export function formatProcessDate(value: string) {
 
 export function formatPersianNumber(value: number) {
   return new Intl.NumberFormat("fa-IR").format(value);
+}
+
+/* ------------------------------------------------------------------ migration */
+
+const APPLICANT_LABELS = new Set(["متقاضی", "applicant", "کاربر", "مراجع"]);
+
+export function isAssigneeUnresolved(assignee: Assignee | undefined): boolean {
+  if (!assignee) return true;
+  if (assignee.kind === "applicant") return false;
+  if (assignee.kind === "role") return !assignee.accessLevelId;
+  return !assignee.employeeId;
+}
+
+/**
+ * نگاشت تحمل‌پذیر مسئول مرحله.
+ * مراحل قدیمی فقط `assigneeRole` متنی داشتند: «متقاضی» به متقاضی نگاشت می‌شود و
+ * بقیه به‌عنوان برچسب نا‌حل‌شده نگه داشته می‌شوند تا در اعتبارسنجی انتشار دیده شوند.
+ */
+export function normalizeAssignee(raw: Partial<ProcessStage>): {
+  assignee: Assignee;
+  legacyAssigneeLabel?: string;
+} {
+  const current = raw.assignee;
+  if (current && current.kind) {
+    if (current.kind === "applicant") return { assignee: { kind: "applicant" } };
+    if (current.kind === "role") {
+      return { assignee: { kind: "role", accessLevelId: current.accessLevelId ?? "" } };
+    }
+    return { assignee: { kind: "employee", employeeId: current.employeeId ?? "" } };
+  }
+  const label = (raw.assigneeRole ?? "").trim();
+  if (raw.assigneeType === "applicant" || APPLICANT_LABELS.has(label)) {
+    return { assignee: { kind: "applicant" } };
+  }
+  return {
+    assignee: { kind: "role", accessLevelId: "" },
+    ...(label ? { legacyAssigneeLabel: label } : {}),
+  };
+}
+
+export function normalizeStage(raw: Partial<ProcessStage>): ProcessStage {
+  const { assignee, legacyAssigneeLabel } = normalizeAssignee(raw);
+  const defaults: RejectPolicy = assignee.kind === "applicant" ? "reject_final" : "return_to_applicant";
+  const escalation = raw.escalation;
+  return {
+    id: raw.id ?? `stage-${crypto.randomUUID()}`,
+    title: raw.title ?? "",
+    assignee,
+    slaDays: Math.max(1, Number(raw.slaDays) || 1),
+    formIds: Array.isArray(raw.formIds) ? [...raw.formIds] : [],
+    formVersions: raw.formVersions ? { ...raw.formVersions } : {},
+    guidance: raw.guidance ?? "",
+    routeRules: Array.isArray(raw.routeRules)
+      ? raw.routeRules.map((rule) => ({
+          id: rule.id ?? `route-${crypto.randomUUID()}`,
+          condition: {
+            logic: rule.condition?.logic === "or" ? "or" : "and",
+            clauses: Array.isArray(rule.condition?.clauses) ? rule.condition.clauses : [],
+          },
+          nextStageId: rule.nextStageId ?? "",
+        }))
+      : [],
+    defaultNextStageId: raw.defaultNextStageId ?? "",
+    onReject: raw.onReject === "reject_final" || raw.onReject === "return_to_applicant" ? raw.onReject : defaults,
+    ...(escalation
+      ? {
+          escalation: {
+            afterDays: Math.max(1, Number(escalation.afterDays) || Math.max(1, Number(raw.slaDays) || 1)),
+            to: normalizeAssignee({ assignee: escalation.to }).assignee,
+          },
+        }
+      : {}),
+    ...(raw.assigneeRole ? { assigneeRole: raw.assigneeRole } : {}),
+    ...(legacyAssigneeLabel ? { legacyAssigneeLabel } : {}),
+  };
+}
+
+/** سازگاری با نسخه‌ای که `destination` رشته‌ای بود (`internal` | `form`). */
+export function ensureComputedDestination(raw: ComputedProcessField | (Record<string, unknown> & {
+  id: string;
+  name: string;
+  formula?: ComputedProcessField["formula"];
+})): ComputedDestination {
+  const destination = (raw as { destination?: unknown }).destination;
+  if (destination && typeof destination === "object" && "kind" in destination) {
+    const candidate = destination as ComputedDestination;
+    if (candidate.kind === "internal") return { kind: "internal" };
+    if (candidate.kind === "form_field" || candidate.kind === "payment_amount") return candidate;
+  }
+  const legacy = raw as unknown as {
+    destination?: string;
+    destinationStageId?: string;
+    destinationFormId?: string;
+    destinationFieldId?: string;
+  };
+  if (legacy.destination === "form" && legacy.destinationStageId && legacy.destinationFormId) {
+    return {
+      kind: "form_field",
+      stageId: legacy.destinationStageId,
+      formId: legacy.destinationFormId,
+      fieldId: legacy.destinationFieldId ?? "",
+    };
+  }
+  return { kind: "internal" };
+}
+
+export function normalizeComputedField(raw: ComputedProcessField): ComputedProcessField {
+  return {
+    id: raw.id,
+    name: raw.name ?? "",
+    formula: raw.formula ?? { tokens: [] },
+    unit: raw.unit,
+    unitCategory: raw.unitCategory,
+    destination: ensureComputedDestination(raw),
+  };
+}
+
+/** خواننده‌ی تحمل‌پذیر بازنویسی خلاصه مشاوره؛ فقط مقادیر معتبر نگه داشته می‌شوند. */
+export function normalizeConsultation(raw: ProcessConsultation): ProcessConsultation {
+  const text = (value: unknown) =>
+    typeof value === "string" && value.trim() ? value.trim() : undefined;
+  const requiredDocumentsText = text(raw.requiredDocumentsText);
+  const feesText = text(raw.feesText);
+  const prerequisites = text(raw.prerequisites);
+  const days = Number(raw.estimatedDurationDays);
+  return {
+    ...(requiredDocumentsText ? { requiredDocumentsText } : {}),
+    ...(feesText ? { feesText } : {}),
+    ...(Number.isFinite(days) && days > 0
+      ? { estimatedDurationDays: Math.round(days) }
+      : {}),
+    ...(prerequisites ? { prerequisites } : {}),
+  };
+}
+
+/** خواننده‌ی تحمل‌پذیر پروسه‌های ذخیره‌شده (شامل شکل‌های قدیمی). */
+export function normalizeProcess(raw: Partial<ProcessDefinition>): ProcessDefinition {
+  return {
+    id: raw.id ?? `proc-${crypto.randomUUID()}`,
+    code: raw.code ?? "",
+    title: raw.title ?? "",
+    department: raw.department ?? PROCESS_DEPARTMENTS[0]!,
+    description: raw.description ?? "",
+    icon: raw.icon ?? "file",
+    status: raw.status === "active" || raw.status === "inactive" || raw.status === "archived" ? raw.status : "draft",
+    version: raw.version ?? "0.1",
+    activeCases: Number(raw.activeCases) || 0,
+    updatedAt: raw.updatedAt ?? new Date().toISOString(),
+    stages: Array.isArray(raw.stages) ? raw.stages.map((stage) => normalizeStage(stage)) : [],
+    fields: Array.isArray(raw.fields) ? raw.fields : [],
+    rules: Array.isArray(raw.rules) ? raw.rules : [],
+    applicantGuidance: raw.applicantGuidance ?? "",
+    payment: {
+      mode: raw.payment?.mode ?? "none",
+      provider: raw.payment?.provider ?? "",
+      amount: Number(raw.payment?.amount) || 0,
+      formula: raw.payment?.formula ?? "",
+    },
+    ...(raw.consultation ? { consultation: normalizeConsultation(raw.consultation) } : {}),
+    computedFields: Array.isArray(raw.computedFields)
+      ? raw.computedFields.map((field) => normalizeComputedField(field))
+      : [],
+    publishedVersions: Array.isArray(raw.publishedVersions) ? raw.publishedVersions : [],
+    ...(raw.sourceFileName ? { sourceFileName: raw.sourceFileName } : {}),
+    directiveFileNames: Array.isArray(raw.directiveFileNames) ? raw.directiveFileNames : [],
+  };
 }

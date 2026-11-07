@@ -20,7 +20,6 @@ import {
   ChevronRight,
   ChevronLeft,
   Eye,
-  RotateCcw,
 } from "lucide-react";
 import { useTheme } from "../../theme-context";
 import JalaliDateRangeFilter, { type DateRangeValue } from "../JalaliDateRangeFilter";
@@ -79,101 +78,7 @@ function formatTime(d: Date) {
   }).format(d);
 }
 
-const sampleLogs: AuditLog[] = [
-  {
-    id: 1,
-    userId: "emp-1",
-    userName: "علی محمدی",
-    action: "LOGIN",
-    module: "AUTH",
-    recordId: "—",
-    oldValues: null,
-    newValues: null,
-    ipAddress: "192.168.1.10",
-    userAgent: "Chrome / Windows",
-    createdAt: new Date("2026-10-12T08:42:00"),
-  },
-  {
-    id: 2,
-    userId: "emp-2",
-    userName: "سارا احمدی",
-    action: "CREATE",
-    module: "REQUESTS",
-    recordId: "1045-1405",
-    oldValues: null,
-    newValues: '{"title":"درخواست مرخصی استحقاقی"}',
-    ipAddress: "192.168.1.22",
-    userAgent: "Chrome / macOS",
-    createdAt: new Date("2026-10-12T09:18:00"),
-  },
-  {
-    id: 3,
-    userId: "emp-3",
-    userName: "رضا کریمی",
-    action: "UPDATE",
-    module: "EMPLOYEES",
-    recordId: "emp-5",
-    oldValues: '{"role":"طراح UI"}',
-    newValues: '{"role":"طراح ارشد UI"}',
-    ipAddress: "192.168.1.35",
-    userAgent: "Firefox / Windows",
-    createdAt: new Date("2026-10-12T10:05:00"),
-  },
-  {
-    id: 4,
-    userId: "emp-1",
-    userName: "علی محمدی",
-    action: "DELETE",
-    module: "FORMS",
-    recordId: "form-12",
-    oldValues: '{"name":"فرم درخواست تجهیزات","status":"active"}',
-    newValues: null,
-    ipAddress: "192.168.1.10",
-    userAgent: "Chrome / Windows",
-    createdAt: new Date("2026-10-12T10:32:00"),
-  },
-  {
-    id: 5,
-    userId: "emp-4",
-    userName: "مینا رضایی",
-    action: "VIEW",
-    module: "REPORTS",
-    recordId: "requests",
-    oldValues: null,
-    newValues: null,
-    ipAddress: "192.168.1.48",
-    userAgent: "Safari / iOS",
-    createdAt: new Date("2026-10-12T11:10:00"),
-  },
-  {
-    id: 6,
-    userId: "emp-5",
-    userName: "حسین نوری",
-    action: "UPDATE",
-    module: "PROCESSES",
-    recordId: "proc-3",
-    oldValues: '{"deadline":"2 روز کاری"}',
-    newValues: '{"deadline":"3 روز کاری"}',
-    ipAddress: "192.168.1.51",
-    userAgent: "Chrome / Windows",
-    createdAt: new Date("2026-10-11T15:40:00"),
-  },
-  {
-    id: 7,
-    userId: "emp-1",
-    userName: "علی محمدی",
-    action: "RESTORE",
-    module: "FORMS",
-    recordId: "form-12",
-    oldValues: null,
-    newValues: '{"name":"فرم درخواست تجهیزات","status":"active"}',
-    ipAddress: "192.168.1.10",
-    userAgent: "Chrome / Windows",
-    createdAt: new Date("2026-10-12T12:00:00"),
-  },
-];
-
-export default function AuditLogTable({ data = sampleLogs }: { data?: AuditLog[] }) {
+export default function AuditLogTable({ data }: { data: AuditLog[] }) {
   const { isDarkMode } = useTheme();
   const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -272,16 +177,6 @@ export default function AuditLogTable({ data = sampleLogs }: { data?: AuditLog[]
                 <Eye className="h-3 w-3" />
                 جزئیات
               </button>
-              {(log.action === "DELETE" || log.action === "UPDATE") && (
-                <button
-                  type="button"
-                  onClick={(e) => e.stopPropagation()}
-                  className="inline-flex items-center gap-1 rounded-full border border-[#15554f]/30 bg-[#15554f]/10 px-2 py-1 text-[0.65rem] font-semibold text-[#15554f] transition hover:bg-[#15554f]/20"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  بازگردانی
-                </button>
-              )}
             </div>
           );
         },
@@ -551,16 +446,6 @@ export default function AuditLogTable({ data = sampleLogs }: { data?: AuditLog[]
                   </pre>
                 </div>
               </div>
-            )}
-
-            {(selected.action === "DELETE" || selected.action === "UPDATE") && (
-              <button
-                type="button"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[#15554f] bg-[#15554f] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#124740]"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                بازگردانی به حالت قبل
-              </button>
             )}
           </div>
         )}

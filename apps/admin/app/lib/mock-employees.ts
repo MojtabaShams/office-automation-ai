@@ -1,16 +1,3 @@
-export type Permission = {
-  view: boolean;
-  add: boolean;
-  edit: boolean;
-  delete: boolean;
-};
-
-export type AccessLevel = {
-  id: string;
-  name: string;
-  permissions: Record<string, Permission>;
-};
-
 export type Employee = {
   id: string;
   fullName: string;
@@ -21,31 +8,6 @@ export type Employee = {
   status: "active" | "inactive";
   hireDate: Date;
 };
-
-/** بخش‌های سیستم که سطح دسترسی می‌تواند رویشان کنترل داشته باشد (هماهنگ با منوی بالای پنل) */
-export const CONTROL_MODULES = [
-  { id: "employees", label: "کارمندان" },
-  { id: "processes", label: "پروسه‌ها" },
-  { id: "requests", label: "درخواست‌ها" },
-  { id: "calendar", label: "تقویم کاری" },
-  { id: "messages", label: "پیام‌ها" },
-  { id: "reports", label: "گزارشات" },
-];
-
-const fullAccess = (): Record<string, Permission> =>
-  Object.fromEntries(
-    CONTROL_MODULES.map((m) => [m.id, { view: true, add: true, edit: true, delete: true }])
-  );
-
-const viewOnlyAccess = (): Record<string, Permission> =>
-  Object.fromEntries(
-    CONTROL_MODULES.map((m) => [m.id, { view: true, add: false, edit: false, delete: false }])
-  );
-
-export const initialAccessLevels: AccessLevel[] = [
-  { id: "lvl-admin", name: "مدیر کل", permissions: fullAccess() },
-  { id: "lvl-staff", name: "کارمند عادی", permissions: viewOnlyAccess() },
-];
 
 // تاریخ مبنا ثابت (نه new Date() لحظه‌ای) تا رندر سرور/کلاینت یکسان بماند
 const REFERENCE_NOW = new Date(2026, 8, 25, 12, 0, 0);

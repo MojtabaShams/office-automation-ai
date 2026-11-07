@@ -6,7 +6,7 @@ import ConditionFormulaEditor, {
   type FormulaValue,
   type ConditionVariable,
 } from "../ConditionFormulaEditor";
-import type { AggregationFn, ReportMetric } from "../../app/lib/mock-reports";
+import type { AggregationFn, ReportMetric } from "../../app/lib/report-types";
 import type { ReportField } from "../../app/lib/report-entities";
 import { useTheme } from "../../theme-context";
 import ThemedSelect from "../ThemedSelect";

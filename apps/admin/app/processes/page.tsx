@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   Archive,
   Banknote,
   Building2,
@@ -12,6 +13,7 @@ import {
   ClipboardList,
   FileText,
   Landmark,
+  Loader2,
   MoreVertical,
   Pencil,
   Plus,
@@ -30,24 +32,22 @@ import Modal from "../../components/Modal";
 import ProcessBuilderWizard from "../../components/processes/ProcessBuilderWizard";
 import SearchMatchText, { countSearchMatches } from "../../components/SearchMatchText";
 import {
-  FORM_STORAGE_KEY,
   formatPersianNumber,
   formatProcessDate,
-  initialForms,
-  initialProcesses,
   PROCESS_DEPARTMENTS,
-  PROCESS_STORAGE_KEY,
-  saveProcesses,
   type FormDefinition,
   type ProcessDefinition,
   type ProcessStatus,
 } from "../lib/mock-processes";
 import { ensureFormVersions } from "../lib/mock-forms";
 import {
-  PAYMENT_GATEWAYS_STORAGE_KEY,
-  savePaymentGateways,
-  type PaymentGateway,
-} from "../lib/payment-gateways";
+  archiveProcessDefinition,
+  listAdminForms,
+  listProcessDefinitions,
+  publishProcessDefinition,
+  saveProcessDefinition,
+} from "../lib/admin-api";
+import { assigneeLabelOf, inactiveLinkedForms } from "../lib/process-validation";
 import { UNIT_LABELS } from "../lib/units";
 
 const STATUS_FILTERS: { value: "all" | ProcessStatus; label: string }[] = [
@@ -72,23 +72,6 @@ const STATUS_LABEL: Record<ProcessStatus, string> = {
   draft: "پیش‌نویس",
   archived: "بایگانی‌شده",
 };
-
-function isPaymentGatewayList(value: unknown): value is PaymentGateway[] {
-  return Array.isArray(value) && value.every((gateway: unknown) =>
-    typeof gateway === "object"
-    && gateway !== null
-    && "id" in gateway
-    && typeof gateway.id === "string"
-    && "bankName" in gateway
-    && typeof gateway.bankName === "string"
-    && "connectionKey" in gateway
-    && typeof gateway.connectionKey === "string"
-    && "description" in gateway
-    && typeof gateway.description === "string"
-    && "updatedAt" in gateway
-    && typeof gateway.updatedAt === "string"
-  );
-}
 
 function IconForProcess({ icon, className }: { icon: string; className?: string }) {
   const Icon = icon === "building"
@@ -125,23 +108,23 @@ function ProcessPreview({ process, forms, onClose }: { process: ProcessDefinitio
         <section className={`rounded-xl border p-4 ${surface}`}>
           <h4 className="mb-3 text-xs font-bold">زنجیره مراحل</h4>
           <ol className="space-y-2">
-            {process.stages.map((stage, index) => (
+            {process.stages.length ? process.stages.map((stage, index) => (
               <li key={stage.id} className={`flex items-start gap-2 text-xs ${muted}`}>
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#15554f]/10 text-[0.62rem] text-[#15554f]">{index + 1}</span>
                 <span>
-                  {stage.title} <span className="opacity-70">· {stage.assigneeRole} · {formatPersianNumber(stage.slaDays)} روز</span>
+                  {stage.title} <span className="opacity-70">· {assigneeLabelOf(stage.assignee)} · {formatPersianNumber(stage.slaDays)} روز</span>
                   <span className="mt-1 block text-[0.62rem] text-[#15554f]">
                     {stage.formIds?.length ? stage.formIds.map((formId) => forms.find((form) => form.id === formId)?.title ?? "فرم").join(" · ") : "فرمی انتخاب نشده است"}
                   </span>
                 </span>
               </li>
-            ))}
+            )) : <li className="text-xs opacity-70">مرحله‌ای برای این پروسه ثبت نشده است.</li>}
           </ol>
         </section>
         <section className={`rounded-xl border p-4 ${surface}`}>
           <h4 className="mb-3 text-xs font-bold">فیلدهای فرم و قوانین</h4>
           <div className="mb-3 space-y-2">
-            {process.fields.map((field) => (
+            {process.fields.length ? process.fields.map((field) => (
               <div key={field.id} className={`rounded-lg border p-2 ${isDarkMode ? "border-white/10 bg-white/[0.025]" : "border-[#d5dad4] bg-white"}`}>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className={`rounded-full border px-2.5 py-1 text-[0.65rem] ${isDarkMode ? "border-white/10 text-white/75" : "border-[#d5dad4] text-[#40584e]"}`}>
@@ -155,7 +138,7 @@ function ProcessPreview({ process, forms, onClose }: { process: ProcessDefinitio
                   {field.subFields.map((subField) => <span key={subField.id} className={`rounded-full px-2 py-1 text-[0.62rem] ${isDarkMode ? "bg-white/[0.05] text-white/65" : "bg-[#edf0eb] text-[#40584e]"}`}>{subField.label || "زیرفیلد"}{subField.slug ? ` · ${subField.slug}` : ""}</span>)}
                 </div>}
               </div>
-            ))}
+            )) : <p className={`text-[0.68rem] leading-5 ${muted}`}>فیلدی برای این پروسه ثبت نشده است.</p>}
           </div>
           <ul className={`space-y-1.5 text-[0.68rem] leading-5 ${muted}`}>
             {process.rules.length ? process.rules.map((rule, index) => <li key={`${index}-${rule}`}>• {rule}</li>) : <li>قانون خاصی ثبت نشده است.</li>}
@@ -175,8 +158,10 @@ function ProcessPreview({ process, forms, onClose }: { process: ProcessDefinitio
 
 export default function ProcessesPage() {
   const { isDarkMode } = useTheme();
-  const [processes, setProcesses] = useState<ProcessDefinition[]>(initialProcesses);
-  const [forms, setForms] = useState<FormDefinition[]>(initialForms);
+  const [processes, setProcesses] = useState<ProcessDefinition[]>([]);
+  const [forms, setForms] = useState<FormDefinition[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
   const [activeMatch, setActiveMatch] = useState(0);
   const matchRefs = useRef<(HTMLElement | null)[]>([]);
@@ -190,35 +175,31 @@ export default function ProcessesPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  /** Processes and forms both come from PostgreSQL; nothing is kept in localStorage. */
+  const reload = useCallback(async () => {
     try {
-      const stored = window.localStorage.getItem(PROCESS_STORAGE_KEY);
-      if (stored) setProcesses(JSON.parse(stored) as ProcessDefinition[]);
-    } catch (storageError) {
-      console.error("بارگذاری پروسه‌های ذخیره‌شده ناموفق بود:", storageError);
-      setError("پروسه‌های ذخیره‌شده بارگذاری نشدند؛ داده‌های نمونه نمایش داده می‌شوند.");
-    }
-    try {
-      const storedForms = window.localStorage.getItem(FORM_STORAGE_KEY);
-      if (storedForms) {
-        setForms(ensureFormVersions(JSON.parse(storedForms) as FormDefinition[]));
-      }
-    } catch (storageError) {
-      console.error("بارگذاری فرم‌های ذخیره‌شده ناموفق بود:", storageError);
+      const [processList, formList] = await Promise.all([
+        listProcessDefinitions(),
+        listAdminForms(),
+      ]);
+      setProcesses(processList);
+      setForms(ensureFormVersions(formList));
+      setError("");
+    } catch (loadError) {
+      console.error("بارگذاری پروسه‌ها از سرور ناموفق بود:", loadError);
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "بارگذاری پروسه‌ها از سرور ناموفق بود.",
+      );
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  const persist = (next: ProcessDefinition[], successMessage?: string) => {
-    setProcesses(next);
-    try {
-      saveProcesses(next);
-      setError("");
-      if (successMessage) setNotice(successMessage);
-    } catch (storageError) {
-      console.error("ذخیره پروسه‌ها ناموفق بود:", storageError);
-      setError("تغییرات نمایش داده شدند، اما در مرورگر ذخیره نشدند.");
-    }
-  };
+  useEffect(() => {
+    void reload();
+  }, [reload]);
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("fa");
@@ -283,39 +264,61 @@ export default function ProcessesPage() {
     draft: processes.filter((process) => process.status === "draft").length,
   }), [processes]);
 
-  const saveDefinition = (definition: ProcessDefinition, publish: boolean) => {
+  const saveDefinition = async (definition: ProcessDefinition, publish: boolean) => {
     const duplicateCode = processes.some((item) => item.code.toLocaleLowerCase() === definition.code.toLocaleLowerCase() && item.id !== editing?.id && item.status !== "archived");
     if (duplicateCode) {
       setError(`کد شناسه «${definition.code}» قبلاً برای پروسه دیگری ثبت شده است.`);
       return false;
     }
-    const exists = processes.some((item) => item.id === editing?.id);
-    const next = exists
-      ? processes.map((item) => item.id === editing!.id ? { ...definition, id: editing!.id } : item)
-      : [...processes, definition];
-    persist(next, publish ? "پروسه با موفقیت منتشر شد." : "پیش‌نویس پروسه ذخیره شد.");
-    setEditing(null);
-    setWizardOpen(false);
-    return true;
+    setSaving(true);
+    try {
+      await saveProcessDefinition(definition);
+      if (publish) {
+        const result = await publishProcessDefinition(definition);
+        setNotice(`پروسه با نسخه ${result.version} منتشر شد.`);
+      } else {
+        setNotice("پیش‌نویس پروسه ذخیره شد.");
+      }
+      await reload();
+      setEditing(null);
+      setWizardOpen(false);
+      return true;
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const toggleStatus = (process: ProcessDefinition) => {
+  const toggleStatus = async (process: ProcessDefinition) => {
     if (process.status === "draft" || process.status === "archived") return;
-    const nextStatus = process.status === "active" ? "inactive" : "active";
-    persist(
-      processes.map((item) => item.id === process.id ? { ...item, status: nextStatus, updatedAt: new Date().toISOString() } : item),
-      `پروسه «${process.title}» ${nextStatus === "active" ? "فعال" : "غیرفعال"} شد.`
-    );
+    const nextStatus: ProcessStatus = process.status === "active" ? "inactive" : "active";
     setOpenMenu(null);
+    try {
+      await saveProcessDefinition({ ...process, status: nextStatus, updatedAt: new Date().toISOString() });
+      setNotice(`پروسه «${process.title}» ${nextStatus === "active" ? "فعال" : "غیرفعال"} شد.`);
+      await reload();
+    } catch (statusError) {
+      setError(
+        statusError instanceof Error
+          ? statusError.message
+          : "تغییر وضعیت پروسه ناموفق بود.",
+      );
+    }
   };
 
-  const archive = () => {
+  const archive = async () => {
     if (!archiveTarget) return;
-    persist(
-      processes.map((item) => item.id === archiveTarget.id ? { ...item, status: "archived", updatedAt: new Date().toISOString() } : item),
-      `پروسه «${archiveTarget.title}» به بایگانی منتقل شد.`
-    );
-    setArchiveTarget(null);
+    try {
+      await archiveProcessDefinition(archiveTarget.id);
+      setNotice(`پروسه «${archiveTarget.title}» به بایگانی منتقل شد.`);
+      setArchiveTarget(null);
+      await reload();
+    } catch (archiveError) {
+      setError(
+        archiveError instanceof Error
+          ? archiveError.message
+          : "انتقال پروسه به بایگانی ناموفق بود.",
+      );
+    }
   };
 
   const surface = isDarkMode ? "border-white/10 bg-[#193632]" : "border-[#d5dad4] bg-[#edf0eb]";
@@ -345,7 +348,7 @@ export default function ProcessesPage() {
 
       <section className={`sticky top-0 z-30 mb-4 rounded-2xl border p-3 shadow-sm ${surface}`}>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => { setEditing(null); setWizardOpen(true); setNotice(""); }} className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#15554f] px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-[#246b61]">
+          <button type="button" onClick={() => { setEditing(null); setWizardOpen(true); setNotice(""); }} disabled={saving || loading} className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#15554f] px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-[#246b61] disabled:opacity-60">
             <Plus className="h-3.5 w-3.5" />ایجاد پروسه جدید
           </button>
           <label className={`flex min-w-56 flex-1 items-center gap-2 rounded-full border px-3 py-2.5 text-xs ${field}`}>
@@ -424,7 +427,7 @@ export default function ProcessesPage() {
                     <div className={`absolute left-0 top-full z-20 mt-1 w-48 rounded-xl border p-1.5 shadow-xl ${isDarkMode ? "border-white/10 bg-[#122925]" : "border-[#d5dad4] bg-white"}`}>
                       <button type="button" onClick={() => { setEditing(process); setWizardOpen(true); setOpenMenu(null); setNotice(""); }} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-right text-xs hover:bg-[#15554f]/10"><Pencil className="h-3.5 w-3.5" />ویرایش / ایجاد نسخه</button>
                       <button type="button" onClick={() => { setPreview(process); setOpenMenu(null); }} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-right text-xs hover:bg-[#15554f]/10"><ClipboardList className="h-3.5 w-3.5" />پیش‌نمایش جزئیات</button>
-                      <button type="button" disabled={process.status === "draft"} onClick={() => toggleStatus(process)} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-right text-xs hover:bg-[#15554f]/10 disabled:cursor-not-allowed disabled:opacity-40">
+                      <button type="button" disabled={process.status === "draft"} onClick={() => void toggleStatus(process)} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-right text-xs hover:bg-[#15554f]/10 disabled:cursor-not-allowed disabled:opacity-40">
                         {process.status === "active" ? <ToggleRight className="h-3.5 w-3.5" /> : <ToggleLeft className="h-3.5 w-3.5" />}
                         {process.status === "active" ? "غیرفعال‌کردن سریع" : process.status === "draft" ? "ابتدا پروسه را منتشر کنید" : "فعال‌کردن"}
                       </button>
@@ -434,6 +437,22 @@ export default function ProcessesPage() {
                 </div>
               </div>
               <p className={`mt-3 line-clamp-2 min-h-10 text-xs leading-5 ${muted}`}>{process.description || "بدون توضیحات"}</p>
+              {(() => {
+                const brokenForms = inactiveLinkedForms(process, forms);
+                if (!brokenForms.length) return null;
+                return (
+                  <p
+                    role="alert"
+                    className={`mt-2 flex items-start gap-1.5 rounded-lg border px-2.5 py-1.5 text-[0.65rem] leading-5 ${isDarkMode ? "border-amber-400/30 bg-amber-400/10 text-amber-200" : "border-amber-500/30 bg-amber-500/10 text-amber-800"}`}
+                  >
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      فرم پیوند شده غیرفعال یا آرشیو شده است:{" "}
+                      {brokenForms.map((form) => form.title).join("، ")}
+                    </span>
+                  </p>
+                );
+              })()}
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className={`rounded-full border px-2.5 py-1 text-[0.65rem] ${statusStyle(process.status, isDarkMode)}`}>{STATUS_LABEL[process.status]}</span>
                 <span className={`rounded-full px-2.5 py-1 text-[0.65rem] ${isDarkMode ? "bg-white/[0.06] text-white/65" : "bg-[#edf0eb] text-[#53665b]"}`}>نسخه {process.version}</span>
@@ -448,9 +467,18 @@ export default function ProcessesPage() {
         </div>
       ) : (
         <div className={`rounded-2xl border border-dashed p-10 text-center ${muted} ${isDarkMode ? "border-white/15" : "border-[#cfd6ce]"}`}>
-          <Search className="mx-auto mb-3 h-8 w-8 opacity-40" />
-          <p className="text-sm font-semibold">پروسه‌ای با این فیلترها پیدا نشد</p>
-          <button type="button" onClick={() => { setQuery(""); setDepartment("all"); setStatus("all"); }} className="mt-3 text-xs font-semibold text-[#15554f] hover:underline">پاک کردن فیلترها</button>
+          {loading ? (
+            <>
+              <Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin opacity-40" />
+              <p className="text-sm font-semibold">در حال بارگذاری پروسه‌ها از پایگاه داده…</p>
+            </>
+          ) : (
+            <>
+              <Search className="mx-auto mb-3 h-8 w-8 opacity-40" />
+              <p className="text-sm font-semibold">پروسه‌ای با این فیلترها پیدا نشد</p>
+              <button type="button" onClick={() => { setQuery(""); setDepartment("all"); setStatus("all"); }} className="mt-3 text-xs font-semibold text-[#15554f] hover:underline">پاک کردن فیلترها</button>
+            </>
+          )}
         </div>
       )}
 
@@ -468,7 +496,7 @@ export default function ProcessesPage() {
         message={archiveTarget ? `«${archiveTarget.title}» از فهرست فعال خارج و به بایگانی منتقل می‌شود. این کار پرونده‌های جاری را حذف نمی‌کند. ادامه می‌دهید؟` : ""}
         confirmLabel="انتقال به بایگانی"
         danger
-        onConfirm={archive}
+        onConfirm={() => void archive()}
         onClose={() => setArchiveTarget(null)}
       />
     </div>

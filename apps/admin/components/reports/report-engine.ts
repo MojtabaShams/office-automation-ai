@@ -1,5 +1,5 @@
 import { evaluateFormula, type ConditionValue } from "../ConditionFormulaEditor";
-import type { ReportMetric, ReportDefinition } from "../../app/lib/mock-reports";
+import type { ReportDefinition } from "../../app/lib/report-types";
 import { getReportEntity } from "../../app/lib/report-entities";
 import { gregorianToJalali } from "../../app/lib/jalali";
 

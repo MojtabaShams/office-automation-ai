@@ -11,9 +11,10 @@ import {
   Moon,
   Maximize,
   Minimize,
-  User,
+  UserRound,
   Home,
   Users,
+  ShieldCheck,
   Workflow,
   FileText,
   ClipboardList,
@@ -22,16 +23,25 @@ import {
   BarChart3,
 } from "lucide-react";
 import { useTheme } from "../theme-context";
+import { useAuth } from "../app/auth-context";
 
-const navItems = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof Home;
+  permission?: [string, string];
+};
+
+const navItems: NavItem[] = [
   { href: "/", label: "صفحه اصلی", icon: Home },
-  { href: "/employees", label: "کارمندان", icon: Users },
-  { href: "/forms", label: "فرم‌ها", icon: FileText },
-  { href: "/processes", label: "پروسه‌ها", icon: Workflow },
-  { href: "/requests", label: "درخواست‌ها", icon: ClipboardList },
-  { href: "/calendar", label: "تقویم کاری", icon: CalendarDays },
-  { href: "/messages", label: "پیام‌ها", icon: MessageSquare },
-  { href: "/reports", label: "گزارشات", icon: BarChart3 },
+  { href: "/employees", label: "کارمندان", icon: Users, permission: ["employees", "view"] },
+  { href: "/roles", label: "نقش‌ها", icon: ShieldCheck, permission: ["roles", "view"] },
+  { href: "/forms", label: "فرم‌ها", icon: FileText, permission: ["forms", "view"] },
+  { href: "/processes", label: "پروسه‌ها", icon: Workflow, permission: ["processes", "view"] },
+  { href: "/requests", label: "درخواست‌ها", icon: ClipboardList, permission: ["requests", "view"] },
+  { href: "/calendar", label: "تقویم کاری", icon: CalendarDays, permission: ["calendar", "view"] },
+  { href: "/messages", label: "پیام‌ها", icon: MessageSquare, permission: ["messages", "view"] },
+  { href: "/reports", label: "گزارشات", icon: BarChart3, permission: ["reports", "view"] },
 ];
 
 function ThemeButtons() {
@@ -80,29 +90,23 @@ function FullscreenButton() {
   );
 }
 
-function AccountButton() {
-  return (
-    <button
-      type="button"
-      aria-label="حساب کاربری"
-      className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#276e63] to-[#174b46] text-white shadow-md shadow-black/20 ring-1 ring-white/30 transition-transform hover:scale-105"
-    >
-      <User className="h-4 w-4" />
-    </button>
-  );
-}
-
 export default function AdminTopBar() {
   const { isDarkMode } = useTheme();
+  const { user, hasPermission } = useAuth();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
   const inactiveNav = isDarkMode
     ? "text-slate-300 hover:bg-white/10 hover:text-white"
     : "text-[#40584e] hover:bg-[#e9ece7] hover:text-[#28443d]";
 
+  const visibleItems = navItems.filter(
+    (item) => !item.permission || hasPermission(item.permission[0], item.permission[1]),
+  );
+
   const navigation = (
     <nav aria-label="منوی اصلی" className="flex flex-col gap-1 lg:flex-row lg:items-center lg:gap-0.5">
-      {navItems.map(({ href, label, icon: Icon }) => {
+      {visibleItems.map(({ href, label, icon: Icon }) => {
         const isActive =
           pathname === href ||
           (href === "/requests" && pathname.startsWith("/requests/")) ||
@@ -165,7 +169,23 @@ export default function AdminTopBar() {
             <ThemeButtons />
           </div>
           <FullscreenButton />
-          <AccountButton />
+          <Link
+            href="/profile"
+            aria-label="پروفایل کاربری"
+            title={user?.full_name ?? "پروفایل کاربری"}
+            style={{ color: "#ffffff" }}
+            className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#276e63] to-[#174b46] text-white shadow-md shadow-black/20 ring-1 ring-white/30 transition-transform hover:scale-105"
+          >
+            {user?.avatar ? (
+              <img
+                src={user.avatar}
+                alt={user.full_name ?? "پروفایل کاربری"}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <UserRound className="h-4 w-4" />
+            )}
+          </Link>
         </div>
 
         <button
@@ -202,7 +222,24 @@ export default function AdminTopBar() {
             </div>
             <div className="flex items-center gap-2">
               <FullscreenButton />
-              <AccountButton />
+              <Link
+                href="/profile"
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs ${
+                  isDarkMode ? "border-white/15 text-white" : "border-[#d5dad4] text-[#28443d]"
+                }`}
+              >
+                {user?.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt={user.full_name ?? "پروفایل"}
+                    className="h-5 w-5 rounded-full object-cover"
+                  />
+                ) : (
+                  <UserRound className="h-3.5 w-3.5" />
+                )}
+                {user?.full_name ?? "پروفایل"}
+              </Link>
             </div>
           </div>
         </div>

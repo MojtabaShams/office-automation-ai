@@ -1,0 +1,78 @@
+{
+  "id": "mission_request",
+  "title": "فرم درخواست مأموریت",
+  "description": "ثبت درخواست مأموریت اداری همراه با مقصد، بازه زمانی و برآورد هزینه.",
+  "category": "منابع انسانی",
+  "submitLabel": "ثبت درخواست مأموریت",
+  "sortOrder": 20,
+  "requirements": [
+    {
+      "title": "مدارک لازم",
+      "items": [
+        "تکمیل فرم درخواست مأموریت",
+        "تأییدیه مدیر مستقیم",
+        "دعوت‌نامه یا مستندات مقصد (در صورت وجود)"
+      ]
+    },
+    {
+      "title": "مراحل",
+      "items": [
+        "ثبت درخواست در سامانه",
+        "بررسی مدیر مستقیم",
+        "تأیید امور اداری و مالی",
+        "دریافت حکم مأموریت"
+      ]
+    }
+  ],
+  "fields": [
+    {
+      "name": "employee_name",
+      "label": "نام و نام خانوادگی",
+      "type": "text",
+      "required": true,
+      "minLength": 3,
+      "maxLength": 80
+    },
+    {
+      "name": "employee_id",
+      "label": "کد پرسنلی",
+      "type": "text",
+      "required": true,
+      "pattern": "^[0-9]{4,10}$"
+    },
+    {
+      "name": "destination",
+      "label": "مقصد مأموریت",
+      "type": "text",
+      "required": true,
+      "maxLength": 120
+    },
+    {
+      "name": "start_date",
+      "label": "تاریخ شروع",
+      "type": "date",
+      "required": true,
+      "helpText": "تاریخ را به صورت ۱۴۰۳/۰۵/۱۲ وارد کنید."
+    },
+    {
+      "name": "end_date",
+      "label": "تاریخ پایان",
+      "type": "date",
+      "required": true
+    },
+    {
+      "name": "purpose",
+      "label": "هدف مأموریت",
+      "type": "textarea",
+      "required": true,
+      "maxLength": 500
+    },
+    {
+      "name": "estimated_cost",
+      "label": "هزینه تقریبی (ریال)",
+      "type": "number",
+      "required": false,
+      "min": 0
+    }
+  ]
+}

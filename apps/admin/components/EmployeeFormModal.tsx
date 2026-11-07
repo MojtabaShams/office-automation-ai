@@ -3,65 +3,74 @@
 import React, { useEffect, useState } from "react";
 import {
   BriefcaseBusiness,
-  CalendarDays,
   Check,
   CircleUserRound,
+  KeyRound,
+  Loader2,
   ShieldCheck,
   UserPlus,
 } from "lucide-react";
 import Modal from "./Modal";
-import JalaliDatePicker from "./JalaliDatePicker";
 import ThemedSelect from "./ThemedSelect";
 import { useTheme } from "../theme-context";
-import { Employee, AccessLevel } from "../app/lib/mock-employees";
+import type { Employee, EmployeeFormValues } from "../app/lib/employee-view";
+import type { Role } from "../app/lib/admin-api";
 
-type FormState = {
-  fullName: string;
-  email: string;
-  phone: string;
-  role: string;
-  accessLevelId: string;
-  status: "active" | "inactive";
-  hireDate: Date;
-};
+type FormState = EmployeeFormValues;
 
 const emptyForm: FormState = {
   fullName: "",
   email: "",
   phone: "",
-  role: "",
-  accessLevelId: "",
-  status: "active",
-  hireDate: new Date(),
+  nationalId: "",
+  unit: "",
+  roleId: "",
+  password: "",
+  passwordConfirm: "",
+  isActive: true,
 };
+
+const PERSIAN_DIGITS = "۰۱۲۳۴۵۶۷۸۹";
+const ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩";
+
+function normalizeDigits(value: string) {
+  return value
+    .replace(/[۰-۹]/g, (digit) => String(PERSIAN_DIGITS.indexOf(digit)))
+    .replace(/[٠-٩]/g, (digit) => String(ARABIC_DIGITS.indexOf(digit)));
+}
 
 export default function EmployeeFormModal({
   open,
   onClose,
   onSubmit,
-  accessLevels,
+  roles,
   initial,
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: Omit<Employee, "id"> & { id?: string }) => void;
-  accessLevels: AccessLevel[];
+  onSubmit: (values: EmployeeFormValues) => Promise<void>;
+  roles: Role[];
   initial?: Employee | null;
 }) {
   const { isDarkMode } = useTheme();
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
+    setError("");
     if (initial) {
       setForm({
         fullName: initial.fullName,
         email: initial.email,
         phone: initial.phone,
-        role: initial.role,
-        accessLevelId: initial.accessLevelId,
-        status: initial.status,
-        hireDate: initial.hireDate,
+        nationalId: initial.nationalId,
+        unit: initial.unit,
+        roleId: initial.roleId,
+        password: "",
+        passwordConfirm: "",
+        isActive: initial.status === "active",
       });
     } else {
       setForm(emptyForm);
@@ -87,12 +96,70 @@ export default function EmployeeFormModal({
       };
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setForm((f) => ({ ...f, [key]: value }));
+    setForm((current) => ({ ...current, [key]: value }));
 
-  const handleSubmit = () => {
-    if (!form.fullName.trim() || !form.email.trim()) return;
-    onSubmit({ ...form, id: initial?.id });
-    onClose();
+  const inputClass = `w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition focus:border-[#15554f] focus:ring-2 focus:ring-[#15554f]/15 ${t.input}`;
+
+  const handleSubmit = async () => {
+    setError("");
+    const fullName = form.fullName.trim();
+    const mobile = normalizeDigits(form.phone.trim());
+    const nationalId = normalizeDigits(form.nationalId.trim());
+    const email = form.email.trim();
+
+    if (fullName.length < 3) {
+      setError("نام و نام خانوادگی را کامل وارد کنید.");
+      return;
+    }
+    if (!/^09\d{9}$/.test(mobile)) {
+      setError("شماره موبایل باید ۱۱ رقم و با ۰۹ شروع شود.");
+      return;
+    }
+    if (!/^\d{10}$/.test(nationalId)) {
+      setError("کد ملی باید ۱۰ رقم باشد.");
+      return;
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("ایمیل وارد شده معتبر نیست.");
+      return;
+    }
+    if (!form.roleId) {
+      setError("نقش سازمانی کاربر را انتخاب کنید.");
+      return;
+    }
+    if (!initial) {
+      if (form.password.length < 8) {
+        setError("رمز عبور باید حداقل ۸ نویسه باشد.");
+        return;
+      }
+      if (!/[A-Za-z]/.test(form.password) || !/\d/.test(form.password)) {
+        setError("رمز عبور باید شامل حرف و رقم باشد.");
+        return;
+      }
+      if (form.password !== form.passwordConfirm) {
+        setError("رمز عبور و تکرار آن یکسان نیست.");
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      await onSubmit({
+        fullName,
+        email,
+        phone: mobile,
+        nationalId,
+        unit: form.unit.trim(),
+        roleId: form.roleId,
+        password: form.password,
+        passwordConfirm: form.passwordConfirm,
+        isActive: form.isActive,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "ذخیره اطلاعات کارمند ناموفق بود.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -112,7 +179,7 @@ export default function EmployeeFormModal({
               {initial ? "اطلاعات کارمند را ویرایش کنید" : "اطلاعات کارمند جدید را وارد کنید"}
             </h3>
             <p className={`mt-1 text-xs leading-5 ${t.sub}`}>
-              مشخصات فردی، نقش سازمانی و سطح دسترسی را در این فرم تکمیل کنید.
+              مشخصات فردی، واحد سازمانی و نقش دسترسی را در این فرم تکمیل کنید.
             </p>
           </div>
         </div>
@@ -132,7 +199,21 @@ export default function EmployeeFormModal({
                 value={form.fullName}
                 onChange={(e) => set("fullName", e.target.value)}
                 placeholder="نام کامل کارمند"
-                className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition focus:border-[#15554f] focus:ring-2 focus:ring-[#15554f]/15 ${t.input}`}
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label htmlFor="employee-national-id" className={`mb-1.5 block text-xs font-medium ${t.sub}`}>
+                کد ملی
+              </label>
+              <input
+                id="employee-national-id"
+                value={form.nationalId}
+                onChange={(e) => set("nationalId", e.target.value)}
+                placeholder="۱۰ رقم"
+                dir="ltr"
+                inputMode="numeric"
+                className={inputClass}
               />
             </div>
             <div>
@@ -145,32 +226,22 @@ export default function EmployeeFormModal({
                 onChange={(e) => set("email", e.target.value)}
                 placeholder="name@example.com"
                 dir="ltr"
-                className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition focus:border-[#15554f] focus:ring-2 focus:ring-[#15554f]/15 ${t.input}`}
+                type="email"
+                className={inputClass}
               />
             </div>
             <div>
               <label htmlFor="employee-phone" className={`mb-1.5 block text-xs font-medium ${t.sub}`}>
-                شماره تماس
+                شماره موبایل
               </label>
               <input
                 id="employee-phone"
                 value={form.phone}
                 onChange={(e) => set("phone", e.target.value)}
-                placeholder="0912..."
+                placeholder="09121234567"
                 dir="ltr"
-                className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition focus:border-[#15554f] focus:ring-2 focus:ring-[#15554f]/15 ${t.input}`}
-              />
-            </div>
-            <div>
-              <label htmlFor="employee-role" className={`mb-1.5 block text-xs font-medium ${t.sub}`}>
-                نقش شغلی
-              </label>
-              <input
-                id="employee-role"
-                value={form.role}
-                onChange={(e) => set("role", e.target.value)}
-                placeholder="مثلاً: کارشناس اداری"
-                className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition focus:border-[#15554f] focus:ring-2 focus:ring-[#15554f]/15 ${t.input}`}
+                inputMode="tel"
+                className={inputClass}
               />
             </div>
           </div>
@@ -183,28 +254,40 @@ export default function EmployeeFormModal({
           </div>
           <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
             <div>
-              <label htmlFor="employee-access-level" className={`mb-1.5 block text-xs font-medium ${t.sub}`}>
-                سطح دسترسی
+              <label htmlFor="employee-unit" className={`mb-1.5 block text-xs font-medium ${t.sub}`}>
+                واحد سازمانی
+              </label>
+              <input
+                id="employee-unit"
+                value={form.unit}
+                onChange={(e) => set("unit", e.target.value)}
+                placeholder="مثلاً معاونت اداری"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label htmlFor="employee-role" className={`mb-1.5 block text-xs font-medium ${t.sub}`}>
+                نقش دسترسی
               </label>
               <div className="relative">
                 <ShieldCheck className={`pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 ${t.sub}`} />
                 <ThemedSelect
-                  id="employee-access-level"
-                  value={form.accessLevelId}
-                  onChange={(e) => set("accessLevelId", e.target.value)}
+                  id="employee-role"
+                  value={form.roleId}
+                  onChange={(e) => set("roleId", e.target.value)}
                   className={`w-full rounded-xl border py-2.5 pl-9 pr-9 text-sm outline-none transition focus:border-[#15554f] focus:ring-2 focus:ring-[#15554f]/15 ${t.select}`}
                   arrowClassName={`left-3 ${t.sub}`}
                 >
                   <option value="" style={{ backgroundColor: "#fff", color: "#111827" }}>
-                    انتخاب سطح دسترسی
+                    انتخاب نقش
                   </option>
-                  {accessLevels.map((level) => (
+                  {roles.map((role) => (
                     <option
-                      key={level.id}
-                      value={level.id}
+                      key={role.id}
+                      value={role.id}
                       style={{ backgroundColor: "#fff", color: "#111827" }}
                     >
-                      {level.name}
+                      {role.name}
                     </option>
                   ))}
                 </ThemedSelect>
@@ -217,13 +300,13 @@ export default function EmployeeFormModal({
               <div className="relative">
                 <span
                   className={`pointer-events-none absolute right-3 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full ${
-                    form.status === "active" ? "bg-emerald-500" : "bg-rose-500"
+                    form.isActive ? "bg-emerald-500" : "bg-rose-500"
                   }`}
                 />
                 <ThemedSelect
                   id="employee-status"
-                  value={form.status}
-                  onChange={(e) => set("status", e.target.value as "active" | "inactive")}
+                  value={form.isActive ? "active" : "inactive"}
+                  onChange={(e) => set("isActive", e.target.value === "active")}
                   className={`w-full rounded-xl border py-2.5 pl-9 pr-9 text-sm outline-none transition focus:border-[#15554f] focus:ring-2 focus:ring-[#15554f]/15 ${t.select}`}
                   arrowClassName={`left-3 ${t.sub}`}
                 >
@@ -236,33 +319,74 @@ export default function EmployeeFormModal({
                 </ThemedSelect>
               </div>
             </div>
-            <div>
-              <label className={`mb-1.5 flex items-center gap-1.5 text-xs font-medium ${t.sub}`}>
-                <CalendarDays className="h-3.5 w-3.5" />
-                تاریخ استخدام
-              </label>
-              <JalaliDatePicker
-                value={form.hireDate}
-                onChange={(date) => set("hireDate", date)}
-              />
-            </div>
           </div>
         </section>
+
+        {!initial && (
+          <section className={`overflow-hidden rounded-2xl border ${t.surface}`}>
+            <div className={`flex items-center gap-2 border-b px-4 py-3 ${t.sub}`}>
+              <KeyRound className="h-4 w-4" />
+              <h4 className="text-xs font-semibold">رمز عبور ورود</h4>
+            </div>
+            <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="employee-password" className={`mb-1.5 block text-xs font-medium ${t.sub}`}>
+                  رمز عبور
+                </label>
+                <input
+                  id="employee-password"
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => set("password", e.target.value)}
+                  autoComplete="new-password"
+                  dir="ltr"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="employee-password-confirm" className={`mb-1.5 block text-xs font-medium ${t.sub}`}>
+                  تکرار رمز عبور
+                </label>
+                <input
+                  id="employee-password-confirm"
+                  type="password"
+                  value={form.passwordConfirm}
+                  onChange={(e) => set("passwordConfirm", e.target.value)}
+                  autoComplete="new-password"
+                  dir="ltr"
+                  className={inputClass}
+                />
+              </div>
+              <p className={`text-[0.65rem] leading-5 sm:col-span-2 ${t.sub}`}>
+                رمز عبور باید حداقل ۸ نویسه و شامل حرف و رقم باشد. رمز به‌صورت هش‌شده ذخیره
+                می‌شود و در پاسخ‌های API بازگردانده نمی‌شود.
+              </p>
+            </div>
+          </section>
+        )}
+
+        {error && (
+          <p role="alert" className="rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs text-rose-600">
+            {error}
+          </p>
+        )}
 
         <div className="flex flex-col-reverse gap-2 border-t border-current/10 pt-4 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onClose}
-            className={`rounded-xl border px-4 py-2.5 text-xs font-medium transition-colors ${t.surface} ${t.text}`}
+            disabled={saving}
+            className={`rounded-xl border px-4 py-2.5 text-xs font-medium transition-colors disabled:opacity-60 ${t.surface} ${t.text}`}
           >
             انصراف
           </button>
           <button
             type="button"
             onClick={handleSubmit}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-[#15554f] to-[#246b61] px-5 py-2.5 text-xs font-semibold text-white shadow-sm shadow-[#15554f]/20 transition hover:brightness-110"
+            disabled={saving}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-[#15554f] to-[#246b61] px-5 py-2.5 text-xs font-semibold text-white shadow-sm shadow-[#15554f]/20 transition hover:brightness-110 disabled:opacity-60"
           >
-            <Check className="h-4 w-4" />
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
             {initial ? "ثبت تغییرات" : "ثبت کارمند"}
           </button>
         </div>

@@ -1,25 +1,29 @@
 @import "tailwindcss";
 
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-  background-color: #f1efe7;
-  color: #28443d;
-}
+/* قواعد پایه داخل @layer base قرار می‌گیرند تا utilityهای Tailwind
+   (مثل text-white) بتوانند روی لینک‌ها و دکمه‌ها آن‌ها را بازنویسی کنند. */
+@layer base {
+  html,
+  body {
+    max-width: 100vw;
+    overflow-x: hidden;
+    background-color: #f1efe7;
+    color: #28443d;
+  }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 
-button:not(:disabled) {
-  cursor: pointer;
-}
+  button:not(:disabled) {
+    cursor: pointer;
+  }
 
-select option {
-  background-color: #fff;
-  color: #111827;
+  select option {
+    background-color: #fff;
+    color: #111827;
+  }
 }
 
 .chat-message-composer {

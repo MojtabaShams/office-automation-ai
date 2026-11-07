@@ -23,7 +23,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar />
         <main
           id="app-main-scroll"
-          className={`relative h-full overflow-y-auto px-4 pt-12 transition-colors duration-300 md:px-6 md:pr-[5.25rem] md:pt-0 ${
+          className={`relative h-full min-h-0 overflow-hidden px-4 pt-12 transition-colors duration-300 md:px-6 md:pr-[5.25rem] md:pt-0 ${
             isDarkMode ? "bg-[#122925]/90" : "bg-[#efede7]/95"
           }`}
         >

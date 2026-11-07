@@ -1,0 +1,67 @@
+{
+  "id": "complaint",
+  "title": "فرم ثبت شکایت / پیشنهاد",
+  "description": "ثبت شکایت، انتقاد یا پیشنهاد درباره خدمات سازمان؛ امکان ارسال ناشناس وجود دارد.",
+  "category": "رسیدگی به شکایات",
+  "submitLabel": "ثبت شکایت",
+  "sortOrder": 40,
+  "requirements": [
+    {
+      "title": "مدارک لازم",
+      "items": [
+        "شرح دقیق موضوع و زمان وقوع",
+        "مستندات یا پیوست‌های مرتبط (در صورت وجود)",
+        "شماره تماس برای پیگیری (در حالت غیرناشناس)"
+      ]
+    },
+    {
+      "title": "مراحل",
+      "items": [
+        "ثبت شکایت در سامانه",
+        "بررسی اولیه توسط دبیرخانه رسیدگی",
+        "ارجاع به واحد مربوطه",
+        "اعلام نتیجه از طریق کد پیگیری"
+      ]
+    }
+  ],
+  "fields": [
+    {
+      "name": "full_name",
+      "label": "نام و نام خانوادگی",
+      "type": "text",
+      "required": true,
+      "minLength": 3,
+      "maxLength": 80
+    },
+    {
+      "name": "mobile",
+      "label": "شماره تماس",
+      "type": "tel",
+      "required": true,
+      "pattern": "^09[0-9]{9}$",
+      "placeholder": "مثال: 09121234567"
+    },
+    {
+      "name": "subject",
+      "label": "موضوع",
+      "type": "text",
+      "required": true,
+      "maxLength": 150
+    },
+    {
+      "name": "description",
+      "label": "شرح",
+      "type": "textarea",
+      "required": true,
+      "maxLength": 2000,
+      "placeholder": "جزئیات موضوع را بنویسید"
+    },
+    {
+      "name": "anonymous",
+      "label": "ارسال ناشناس",
+      "type": "checkbox",
+      "required": false,
+      "helpText": "در حالت ناشناس، هویت شما در گزارش‌ها نمایش داده نمی‌شود."
+    }
+  ]
+}

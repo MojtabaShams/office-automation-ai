@@ -8,19 +8,61 @@ import {
   ChevronDown,
   X,
   CalendarDays,
+  ClipboardList,
   MessageSquareText,
+  MessagesSquare,
   Trash2,
 } from "lucide-react";
 import { useTheme } from "../theme-context";
 import {
-  conversations as initialConversations,
-  Conversation,
-} from "../lib/mock-history";
+  type SubmissionSummary,
+  deleteChatSession,
+  getChatSessions,
+  getSubmissions,
+  getToken,
+} from "../lib/agent-api";
 import {
   formatJalali,
   gregorianToJalali,
   jalaliMonthNames,
 } from "../lib/jalali";
+
+type Conversation = {
+  id: string;
+  title: string;
+  snippet: string;
+  date: Date;
+  messageCount: number;
+};
+
+/** رنگ وضعیت درخواست؛ بدون کلاس dark تا با هر دو تم همخوان باشد. */
+const STATUS_STYLES: Record<string, { dark: string; light: string }> = {
+  approved: {
+    dark: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300",
+    light: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700",
+  },
+  rejected: {
+    dark: "border-rose-400/25 bg-rose-400/10 text-rose-300",
+    light: "border-rose-500/25 bg-rose-500/10 text-rose-700",
+  },
+  in_review: {
+    dark: "border-sky-400/25 bg-sky-400/10 text-sky-300",
+    light: "border-sky-500/25 bg-sky-500/10 text-sky-700",
+  },
+  need_info: {
+    dark: "border-amber-400/25 bg-amber-400/10 text-amber-300",
+    light: "border-amber-500/25 bg-amber-500/10 text-amber-700",
+  },
+  canceled: {
+    dark: "border-white/15 bg-white/[0.06] text-white/60",
+    light: "border-[#d5dad4] bg-[#edf0eb] text-[#68766c]",
+  },
+};
+
+const DEFAULT_STATUS = {
+  dark: "border-white/15 bg-white/10 text-white/80",
+  light: "border-[#15554f]/25 bg-[#15554f]/10 text-[#15554f]",
+};
 
 /** تعداد تکرار query در یک متن (بدون درنظرگرفتن بزرگی/کوچکی حروف) */
 function countMatches(text: string, query: string) {
@@ -100,10 +142,55 @@ export default function HistoryPage() {
   const { isDarkMode } = useTheme();
   const router = useRouter();
 
-  const [items, setItems] = useState<Conversation[]>(initialConversations);
+  const [items, setItems] = useState<Conversation[]>([]);
+  const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [needsAuth, setNeedsAuth] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [query, setQuery] = useState("");
   const [activeMatch, setActiveMatch] = useState(0);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [tab, setTab] = useState<"chats" | "requests">("chats");
+
+  // بارگیری گفتگوها و درخواست‌ها از بک‌اند (به‌جای داده‌های ساختگی قبلی).
+  useEffect(() => {
+    if (!getToken()) {
+      setNeedsAuth(true);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [sessions, submissionsPayload] = await Promise.all([
+          getChatSessions(100),
+          getSubmissions(50),
+        ]);
+        if (cancelled) return;
+        setItems(
+          sessions.sessions.map((session) => ({
+            id: session.id,
+            title: session.title || "گفتگوی جدید",
+            snippet: session.snippet || "بدون پیام",
+            date: session.updated_at ? new Date(session.updated_at) : new Date(),
+            messageCount: session.message_count,
+          })),
+        );
+        setSubmissions(submissionsPayload.submissions);
+      } catch (e) {
+        if (!cancelled)
+          setLoadError(
+            e instanceof Error ? e.message : "بارگذاری تاریخچه ناموفق بود.",
+          );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // فیلتر ماهانه‌ی شمسی: فقط یک ماه + سال (بدون بازه)
   const [filterMonth, setFilterMonth] = useState("");
@@ -116,11 +203,9 @@ export default function HistoryPage() {
 
   const yearOptions = useMemo(() => {
     const set = new Set<number>();
-    initialConversations.forEach((c) =>
-      set.add(gregorianToJalali(c.date).year),
-    );
+    items.forEach((c) => set.add(gregorianToJalali(c.date).year));
     return Array.from(set).sort((a, b) => b - a);
-  }, []);
+  }, [items]);
 
   const hasMonthFilter = !!filterMonth && !!filterYear;
 
@@ -199,9 +284,15 @@ export default function HistoryPage() {
     setActiveMatch((i) => (i - 1 + totalMatches) % totalMatches);
   };
 
-  const handleDelete = (id: string) => {
-    setItems((prev) => prev.filter((c) => c.id !== id));
-    setConfirmDeleteId(null);
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteChatSession(id);
+      setItems((prev) => prev.filter((c) => c.id !== id));
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "حذف گفتگو ناموفق بود.");
+    } finally {
+      setConfirmDeleteId(null);
+    }
   };
 
   const handleContinue = (id: string) => {
@@ -220,6 +311,8 @@ export default function HistoryPage() {
         stickyBg: "border-white/10 bg-[#122925]/95",
         select:
           "rounded-lg border border-white/10 bg-white/[0.06] px-1.5 py-1 text-[0.7rem] text-white/80 outline-none",
+        badge: "bg-white/10 text-white/70",
+        line: "border-white/10",
         optionBg: "#122925",
         optionText: "#ffffff",
       }
@@ -234,6 +327,8 @@ export default function HistoryPage() {
         stickyBg: "border-[#d5dad4] bg-[#edf0eb]/95",
         select:
           "rounded-lg border border-[#d5dad4] bg-white px-1.5 py-1 text-[0.7rem] text-[#40584e] outline-none",
+        badge: "bg-[#edf0eb] text-[#40584e]",
+        line: "border-[#e1e6df]",
         optionBg: "#ffffff",
         optionText: "#28443d",
       };
@@ -244,10 +339,53 @@ export default function HistoryPage() {
       <div
         className={`sticky top-2 z-30 mb-4 rounded-2xl border p-4 shadow-lg backdrop-blur-md ${t.stickyBg}`}
       >
-        <h1 className="mb-1 text-xl font-black">تاریخچه درخواست‌ها</h1>
-        <p className={`mb-4 text-xs ${t.sub}`}>
-          گفتگوهای قبلی خود را جستجو، فیلتر یا مدیریت کنید.
+        <h1 className="mb-1 text-xl font-black">تاریخچه</h1>
+        <p className={`mb-3 text-xs ${t.sub}`}>
+          {tab === "chats"
+            ? "گفتگوهای قبلی خود را جستجو کنید یا از همان‌جا ادامه دهید."
+            : "درخواست‌های ارسال‌شده و وضعیت فعلی هرکدام را ببینید."}
         </p>
+
+        {/* دو تب: تاریخچه گفتگوها و تاریخچه درخواست‌ها */}
+        <div
+          role="tablist"
+          aria-label="تاریخچه"
+          className="mb-3 grid grid-cols-2 gap-2"
+        >
+          {(
+            [
+              { key: "chats", label: "تاریخچه گفتگوها", icon: MessagesSquare, count: items.length },
+              { key: "requests", label: "تاریخچه درخواست‌ها", icon: ClipboardList, count: submissions.length },
+            ] as const
+          ).map(({ key, label, icon: Icon, count }) => {
+            const active = tab === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(key)}
+                className={`flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-[0.72rem] font-semibold transition-colors ${
+                  active ? "border-[#15554f] bg-[#15554f] text-white" : t.chip
+                }`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {label}
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[0.6rem] tabular-nums ${
+                    active ? "bg-white/20 text-white" : t.badge
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {tab === "chats" && (
+          <>
 
         {/* نوار جستجوی پیشرفته، شبیه جستجوی مرورگر (Ctrl+F) */}
         <div
@@ -385,17 +523,37 @@ export default function HistoryPage() {
             </button>
           )}
         </div>
+          </>
+        )}
       </div>
 
       {/* لیست گفتگوها */}
       <div className="flex flex-col gap-2.5">
-        {sorted.length === 0 && (
+        {loading && (
           <p className={`py-10 text-center text-sm ${t.sub}`}>
-            موردی یافت نشد.
+            در حال بارگذاری…
           </p>
         )}
 
-        {sorted.map((c) => {
+        {!loading && needsAuth && (
+          <p className={`py-10 text-center text-sm ${t.sub}`}>
+            برای مشاهده تاریخچه، ابتدا از صفحه اصلی وارد حساب کاربری شوید.
+          </p>
+        )}
+
+        {loadError && (
+          <p className="py-2 text-center text-xs text-rose-500">{loadError}</p>
+        )}
+
+        {!loading && !needsAuth && tab === "chats" && sorted.length === 0 && (
+          <p className={`py-10 text-center text-sm ${t.sub}`}>
+            {query || hasMonthFilter
+              ? "گفتگویی با این جستجو یا فیلتر پیدا نشد."
+              : "هنوز گفتگویی ثبت نشده است؛ از میز خدمت اولین گفتگو را شروع کنید."}
+          </p>
+        )}
+
+        {tab === "chats" && sorted.map((c) => {
           const layout = matchLayout.byId.get(c.id) ?? {
             titleStart: 0,
             snippetStart: 0,
@@ -417,6 +575,7 @@ export default function HistoryPage() {
                 </h3>
                 <span className={`shrink-0 text-[0.65rem] ${t.sub}`}>
                   {formatJalali(c.date)}
+                  {c.messageCount > 0 ? ` · ${c.messageCount} پیام` : ""}
                 </span>
               </div>
 
@@ -473,6 +632,74 @@ export default function HistoryPage() {
           );
         })}
       </div>
+
+      {/* تب درخواست‌ها: درخواست‌های ارسال‌شده و وضعیت فعلی‌شان */}
+      {!loading && !needsAuth && tab === "requests" && (
+        <div className="flex flex-col gap-2.5">
+          {submissions.length === 0 && (
+            <p className={`py-10 text-center text-sm ${t.sub}`}>
+              هنوز درخواستی ثبت نکرده‌اید؛ از میز خدمت اولین فرم اداری را پر کنید.
+            </p>
+          )}
+          {submissions.map((s) => {
+            const badge = STATUS_STYLES[s.status] ?? DEFAULT_STATUS;
+            return (
+              <div
+                key={s.id}
+                className={`rounded-2xl border p-3.5 text-right ${t.card}`}
+              >
+                <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold">
+                    {s.form_title || s.form_id}
+                  </h3>
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-[0.65rem] font-semibold ${
+                      isDarkMode ? badge.dark : badge.light
+                    }`}
+                  >
+                    {s.status_label}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span
+                    className={`text-[0.7rem] tabular-nums ${t.sub}`}
+                    dir="ltr"
+                    title="کد پیگیری"
+                  >
+                    {s.tracking_code}
+                  </span>
+                  <span className={`text-[0.65rem] ${t.sub}`}>
+                    {s.created_at ? formatJalali(new Date(s.created_at)) : "—"}
+                  </span>
+                </div>
+
+                {s.notes && (
+                  <p className={`mt-2 text-xs leading-5 ${t.sub}`}>{s.notes}</p>
+                )}
+
+                {s.events && s.events.length > 0 && (
+                  <ol className={`mt-3 space-y-1.5 border-t pt-2.5 ${t.line}`}>
+                    {s.events.map((event, index) => (
+                      <li
+                        key={`${s.id}-${index}`}
+                        className="flex items-center justify-between gap-2 text-[0.65rem]"
+                      >
+                        <span>{event.status_label}</span>
+                        <span className={`tabular-nums ${t.sub}`}>
+                          {event.created_at
+                            ? formatJalali(new Date(event.created_at))
+                            : "—"}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
