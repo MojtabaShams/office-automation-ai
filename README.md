@@ -11,6 +11,16 @@ A prototype for managing administrative workflows, featuring an administration d
 
 Some data and operations are currently local demonstrations. The AI service is a prototype and does not perform actual document extraction yet.
 
+## Screenshots
+
+| Admin dashboard | Admin form manager |
+| --- | --- |
+| ![Admin dashboard](docs/screenshots/admin-dashboard.png) | ![Admin form manager](docs/screenshots/admin-forms.png) |
+
+| Client assistant | Client history |
+| --- | --- |
+| ![Client assistant](docs/screenshots/client-home.png) | ![Client history](docs/screenshots/client-history.png) |
+
 ## AI Form Assistance
 
 - The LangGraph workflow routes each turn between conversation guidance, form completion, and database-backed field guidance.
